@@ -1,7 +1,14 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
-import { Eye, EyeOff, Lock, Mail, Sparkles, ArrowRight, AlertCircle, CheckCircle2 } from 'lucide-react';
+import { Mail, ArrowRight, UserCheck } from 'lucide-react';
 import { useAuthStore } from '../../authStore';
+import {
+  AuthLayout,
+  FormField,
+  PasswordField,
+  PrimaryButton,
+  AuthErrorMessage
+} from '../../components/auth';
 
 export default function Login() {
   const navigate = useNavigate();
@@ -10,37 +17,82 @@ export default function Login() {
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [showPassword, setShowPassword] = useState(false);
+  const [rememberMe, setRememberMe] = useState(false);
+  const [emailError, setEmailError] = useState<string | null>(null);
+  const [passwordError, setPasswordError] = useState<string | null>(null);
   const [localError, setLocalError] = useState<string | null>(null);
 
   const fromLocation = (location.state as any)?.from?.pathname || '/';
 
-  const handleDemoLogin = async () => {
+  // Load remembered email on mount
+  useEffect(() => {
+    const savedEmail = localStorage.getItem('bizpulse_remembered_email');
+    if (savedEmail) {
+      setEmail(savedEmail);
+      setRememberMe(true);
+    }
+  }, []);
+
+  const handleEmailChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setEmail(e.target.value);
+    if (emailError) setEmailError(null);
+    if (localError) setLocalError(null);
+    if (error) clearError();
+  };
+
+  const handlePasswordChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setPassword(e.target.value);
+    if (passwordError) setPasswordError(null);
+    if (localError) setLocalError(null);
+    if (error) clearError();
+  };
+
+  const validate = (): boolean => {
+    let isValid = true;
+    setEmailError(null);
+    setPasswordError(null);
+    setLocalError(null);
+
+    const cleanEmail = email.trim();
+    if (!cleanEmail) {
+      setEmailError('Please enter your business email address.');
+      isValid = false;
+    } else {
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(cleanEmail)) {
+        setEmailError('Please enter a valid email address.');
+        isValid = false;
+      }
+    }
+
+    if (!password) {
+      setPasswordError('Please enter your account password.');
+      isValid = false;
+    }
+
+    return isValid;
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!validate()) return;
+
     clearError();
     setLocalError(null);
-    const res = await demoLogin();
+
+    const res = await login(email.trim(), password, rememberMe);
     if (res.success) {
       navigate(fromLocation, { replace: true });
     }
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleDemoLogin = async () => {
     clearError();
     setLocalError(null);
+    setEmailError(null);
+    setPasswordError(null);
 
-    if (!email.trim() || !password) {
-      setLocalError('Please enter both your email address and password.');
-      return;
-    }
-
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(email.trim())) {
-      setLocalError('Please enter a valid email address.');
-      return;
-    }
-
-    const res = await login(email.trim(), password);
+    const res = await demoLogin();
     if (res.success) {
       navigate(fromLocation, { replace: true });
     }
@@ -49,153 +101,118 @@ export default function Login() {
   const activeError = localError || error;
 
   return (
-    <div className="min-h-screen bg-[#F4FAF9] dark:bg-gray-950 flex flex-col justify-center py-12 sm:px-6 lg:px-8 transition-colors duration-300">
-      
-      {/* Brand Header */}
-      <div className="sm:mx-auto sm:w-full sm:max-w-md text-center px-4">
-        <Link to="/" className="inline-flex items-center space-x-3 mb-6 group">
-          <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-[#028090] to-[#02C39A] flex items-center justify-center shadow-lg shadow-[#028090]/20 group-hover:scale-105 transition-transform">
-            <Sparkles className="w-6 h-6 text-white" />
-          </div>
-          <span className="font-serif text-3xl font-bold text-[#0B2E33] dark:text-gray-100 tracking-tight">BizPulse</span>
-        </Link>
-
-        <h1 className="text-2xl sm:text-3xl font-serif font-bold text-[#0B2E33] dark:text-gray-100">
-          Welcome back to BizPulse
-        </h1>
-        <p className="mt-2 text-sm text-[#5C7A7D] dark:text-gray-400 max-w-sm mx-auto">
-          Continue managing your business insights.
+    <AuthLayout
+      title="Welcome back"
+      subtitle="Sign in to continue managing your business"
+      maxWidth="md"
+      footerContent={
+        <p className="leading-normal">
+          Don&apos;t have an account?{' '}
+          <Link
+            to="/signup"
+            className="font-semibold text-[#1677FF] hover:text-[#0E62D9] dark:text-[#3B82F6] hover:underline focus:outline-none focus:ring-2 focus:ring-[#1677FF] rounded"
+          >
+            Create an account
+          </Link>
         </p>
-      </div>
+      }
+    >
+      <form onSubmit={handleSubmit} noValidate className="space-y-3.5 sm:space-y-4 w-full box-border">
+        {/* Global Error Alert */}
+        {activeError && (
+          <AuthErrorMessage
+            message={activeError}
+            onDismiss={() => {
+              setLocalError(null);
+              clearError();
+            }}
+          />
+        )}
 
-      {/* Card Container */}
-      <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md px-4 sm:px-0">
-        <div className="bg-white dark:bg-gray-900 py-8 px-6 sm:px-10 shadow-xl shadow-teal-900/5 rounded-3xl border border-teal-100/60 dark:border-gray-800">
-          
-          {activeError && (
-            <div className="mb-6 p-4 rounded-2xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 text-rose-800 dark:text-rose-200 text-sm flex items-start space-x-3 animate-in fade-in">
-              <AlertCircle className="w-5 h-5 shrink-0 mt-0.5 text-rose-600 dark:text-rose-400" />
-              <div className="flex-1 font-medium">{activeError}</div>
-            </div>
-          )}
+        {/* Business Email Field */}
+        <FormField
+          id="login-email"
+          label="Business Email"
+          type="email"
+          requiredIndicator
+          autoComplete="email"
+          placeholder="name@company.com"
+          value={email}
+          onChange={handleEmailChange}
+          error={emailError}
+          icon={<Mail className="w-4 h-4 text-[#627D98] dark:text-slate-400" />}
+          disabled={isLoading}
+        />
 
-          <form onSubmit={handleSubmit} className="space-y-5">
-            {/* Email Field */}
-            <div>
-              <label className="block text-xs font-bold text-[#0B2E33] dark:text-gray-300 uppercase tracking-wider mb-2">
-                Business Email
-              </label>
-              <div className="relative rounded-2xl shadow-sm">
-                <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-gray-400">
-                  <Mail className="w-5 h-5" />
-                </div>
-                <input
-                  type="email"
-                  required
-                  autoComplete="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="merchant@yourbusiness.com"
-                  className="w-full pl-11 pr-4 py-3.5 bg-gray-50/50 dark:bg-gray-800/60 border border-gray-200 dark:border-gray-700 rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-[#028090] focus:border-transparent text-[#0B2E33] dark:text-gray-100 placeholder-gray-400 transition-all"
-                />
-              </div>
-            </div>
-
-            {/* Password Field */}
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <label className="block text-xs font-bold text-[#0B2E33] dark:text-gray-300 uppercase tracking-wider">
-                  Password
-                </label>
-                <Link
-                  to="/forgot-password"
-                  className="text-xs font-semibold text-[#028090] hover:text-[#00A896] dark:text-[#02C39A] transition-colors"
-                >
-                  Forgot Password?
-                </Link>
-              </div>
-              <div className="relative rounded-2xl shadow-sm">
-                <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-gray-400">
-                  <Lock className="w-5 h-5" />
-                </div>
-                <input
-                  type={showPassword ? 'text' : 'password'}
-                  required
-                  autoComplete="current-password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="Enter your password"
-                  className="w-full pl-11 pr-11 py-3.5 bg-gray-50/50 dark:bg-gray-800/60 border border-gray-200 dark:border-gray-700 rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-[#028090] focus:border-transparent text-[#0B2E33] dark:text-gray-100 placeholder-gray-400 transition-all"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
-                >
-                  {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
-                </button>
-              </div>
-            </div>
-
-            {/* Submit Button */}
-            <div className="pt-2">
-              <button
-                type="submit"
-                disabled={isLoading}
-                className="w-full flex items-center justify-center py-4 px-6 rounded-2xl shadow-lg shadow-[#028090]/25 bg-gradient-to-r from-[#028090] to-[#00A896] hover:from-[#00A896] hover:to-[#02C39A] text-white font-semibold text-sm transition-all transform active:scale-[0.98] disabled:opacity-60 disabled:cursor-not-allowed"
-              >
-                {isLoading ? (
-                  <div className="flex items-center space-x-2">
-                    <div className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin"></div>
-                    <span>Verifying credentials...</span>
-                  </div>
-                ) : (
-                  <div className="flex items-center space-x-2">
-                    <span>Log In</span>
-                    <ArrowRight className="w-4 h-4" />
-                  </div>
-                )}
-              </button>
-            </div>
-
-            {/* Quick Demo Login Option */}
-            <div className="pt-2">
-              <button
-                type="button"
-                onClick={handleDemoLogin}
-                disabled={isLoading}
-                className="w-full flex items-center justify-center py-3.5 px-6 rounded-2xl bg-teal-50 hover:bg-teal-100/80 dark:bg-gray-800 dark:hover:bg-gray-750 border border-teal-200/80 dark:border-gray-700 text-[#028090] dark:text-[#02C39A] font-semibold text-xs transition-all space-x-2 disabled:opacity-60"
-              >
-                <Sparkles className="w-4 h-4 text-[#028090] dark:text-[#02C39A]" />
-                <span>Explore with Demo Merchant Account</span>
-              </button>
-            </div>
-          </form>
-
-          {/* Quick Demo Test Credential Helper */}
-          <div className="mt-6 pt-5 border-t border-gray-100 dark:border-gray-800 text-center">
-            <div className="text-xs text-[#5C7A7D] dark:text-gray-400 mb-2">
-              Don't have a BizPulse account yet?
-            </div>
+        {/* Password Field */}
+        <PasswordField
+          id="login-password"
+          label="Password"
+          requiredIndicator
+          autoComplete="current-password"
+          placeholder="Enter your password"
+          value={password}
+          onChange={handlePasswordChange}
+          error={passwordError}
+          disabled={isLoading}
+          rightLabelLink={
             <Link
-              to="/signup"
-              className="inline-flex items-center justify-center w-full py-3 px-4 rounded-2xl border border-teal-200 dark:border-gray-700 text-[#028090] dark:text-[#02C39A] font-semibold text-xs hover:bg-teal-50/50 dark:hover:bg-gray-800 transition-colors"
+              to="/forgot-password"
+              className="text-[11px] sm:text-xs font-semibold text-[#1677FF] hover:text-[#0E62D9] dark:text-[#3B82F6] hover:underline focus:outline-none focus:ring-2 focus:ring-[#1677FF] rounded"
             >
-              Create BizPulse Account
+              Forgot password?
             </Link>
-          </div>
+          }
+        />
 
+        {/* Remember Me Checkbox */}
+        <div className="flex items-center justify-between pt-0.5 min-h-[32px]">
+          <label className="flex items-center space-x-2 cursor-pointer select-none py-1">
+            <input
+              id="login-remember-me"
+              type="checkbox"
+              checked={rememberMe}
+              onChange={(e) => setRememberMe(e.target.checked)}
+              disabled={isLoading}
+              className="w-4 h-4 rounded border-[#E4EAF0] dark:border-slate-700 text-[#1677FF] focus:ring-[#1677FF] dark:bg-slate-800 transition shrink-0"
+            />
+            <span className="text-xs text-[#627D98] dark:text-slate-300 font-medium">
+              Remember my email
+            </span>
+          </label>
         </div>
 
-        {/* Security Footer Note */}
-        <div className="mt-8 text-center text-xs text-[#5C7A7D] dark:text-gray-400 space-y-1">
-          <p className="flex items-center justify-center space-x-1">
-            <Lock className="w-3.5 h-3.5 text-[#028090] dark:text-[#02C39A]" />
-            <span>End-to-end encrypted session with isolated merchant data</span>
-          </p>
-          <p>© {new Date().getFullYear()} BizPulse • AI-Powered Business Intelligence</p>
+        {/* Primary Submit Button */}
+        <div className="pt-1">
+          <PrimaryButton
+            type="submit"
+            isLoading={isLoading}
+            loadingText="Signing in..."
+          >
+            <span>Sign In</span>
+            <ArrowRight className="w-4 h-4" aria-hidden="true" />
+          </PrimaryButton>
         </div>
-      </div>
-    </div>
+
+        {/* Divider */}
+        <div className="relative my-3 sm:my-3.5 flex items-center justify-center">
+          <div className="w-full border-t border-[#E4EAF0] dark:border-slate-800" />
+          <span className="absolute px-2.5 bg-white dark:bg-slate-900 text-[10px] sm:text-[11px] font-semibold text-[#627D98] dark:text-slate-400 uppercase tracking-wider">
+            or explore
+          </span>
+        </div>
+
+        {/* Quick Demo Access Button */}
+        <button
+          type="button"
+          onClick={handleDemoLogin}
+          disabled={isLoading}
+          className="w-full min-h-[42px] sm:min-h-[44px] py-2 px-3 sm:px-4 rounded-xl font-medium text-xs sm:text-sm text-[#102A43] dark:text-slate-200 bg-slate-50 hover:bg-slate-100 dark:bg-slate-800/80 dark:hover:bg-slate-800 border border-[#E4EAF0] dark:border-slate-700 transition-all flex items-center justify-center space-x-2 focus:outline-none focus:ring-2 focus:ring-[#1677FF] disabled:opacity-60 box-border"
+        >
+          <UserCheck className="w-4 h-4 text-[#00A896] shrink-0" aria-hidden="true" />
+          <span className="truncate">Instant Demo (Patel Supermart)</span>
+        </button>
+      </form>
+    </AuthLayout>
   );
 }

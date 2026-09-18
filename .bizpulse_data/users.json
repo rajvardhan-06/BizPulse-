@@ -335,5 +335,94 @@
       "suppliers": [],
       "chatHistory": []
     }
+  },
+  {
+    "id": "usr_9c31b25305e0e5830193e2ec",
+    "email": "anita@sharmaretail.com",
+    "passwordHash": "e4af67711f811bf3df7ad4f568379f33975671ee5653b646c61a60cd0e7816fe9ecf9c2a221b730191cbd9068fd6a6a391277ebe269251a2e3270a0eb5b61274",
+    "salt": "6479589c599e8b57db995c31dd399a5b",
+    "fullName": "Anita Sharma",
+    "phoneNumber": "+91 99887 76655",
+    "createdAt": "2026-09-18T15:35:22.901Z",
+    "emailVerified": true,
+    "onboardingCompleted": false,
+    "businessProfile": {
+      "businessName": "Sharma Retail",
+      "businessType": "Retail Shop",
+      "businessCategory": "General Merchandise",
+      "ownerName": "Anita Sharma",
+      "businessEmail": "anita@sharmaretail.com",
+      "phoneNumber": "+91 99887 76655",
+      "address": "",
+      "cityState": "",
+      "currency": "INR",
+      "reportingPeriod": "monthly",
+      "gstNumber": ""
+    },
+    "settings": {
+      "theme": "light",
+      "currency": "INR",
+      "reportingPeriod": "monthly",
+      "defaultCategory": "Inventory / Stock",
+      "alertPreferences": {
+        "budgetAlerts": true,
+        "priceChangeAlerts": true,
+        "lowStockAlerts": true,
+        "unusualSpendingAlerts": true,
+        "productNotifications": false
+      }
+    },
+    "data": {
+      "receipts": [],
+      "inventoryAdjustments": [],
+      "inventorySettings": {},
+      "budgets": [],
+      "suppliers": [],
+      "chatHistory": []
+    }
+  },
+  {
+    "id": "usr_e7761bfe3e4d98dcfb11f9c0",
+    "email": "devtest@bizpulse.com",
+    "passwordHash": "9744f6adba72702a5c2dcf0b750fbd081b1f09bfe6bb8e99d07f41f102964dfe559195c7f733105d3df7556422f1cfb45be9d4c67bf5d834d799c3c774eea053",
+    "salt": "e9d0be4adf1c65a285431d331177b127",
+    "fullName": "Dev Test",
+    "createdAt": "2026-09-18T15:42:06.736Z",
+    "emailVerified": true,
+    "onboardingCompleted": false,
+    "businessProfile": {
+      "businessName": "My Business",
+      "businessType": "Retail Shop",
+      "businessCategory": "General Merchandise",
+      "ownerName": "Dev Test",
+      "businessEmail": "devtest@bizpulse.com",
+      "phoneNumber": "",
+      "address": "",
+      "cityState": "",
+      "currency": "INR",
+      "reportingPeriod": "monthly",
+      "gstNumber": ""
+    },
+    "settings": {
+      "theme": "light",
+      "currency": "INR",
+      "reportingPeriod": "monthly",
+      "defaultCategory": "Inventory / Stock",
+      "alertPreferences": {
+        "budgetAlerts": true,
+        "priceChangeAlerts": true,
+        "lowStockAlerts": true,
+        "unusualSpendingAlerts": true,
+        "productNotifications": false
+      }
+    },
+    "data": {
+      "receipts": [],
+      "inventoryAdjustments": [],
+      "inventorySettings": {},
+      "budgets": [],
+      "suppliers": [],
+      "chatHistory": []
+    }
   }
 ]

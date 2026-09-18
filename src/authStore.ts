@@ -6,10 +6,11 @@ interface AuthState {
   token: string | null;
   isAuthenticated: boolean;
   isLoading: boolean;
+  isInitializing: boolean;
   error: string | null;
   
   initAuth: () => Promise<void>;
-  login: (email: string, password: string) => Promise<{ success: boolean; error?: string }>;
+  login: (email: string, password: string, rememberMe?: boolean) => Promise<{ success: boolean; error?: string }>;
   demoLogin: () => Promise<{ success: boolean; error?: string }>;
   signup: (data: {
     fullName: string;
@@ -94,7 +95,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   user: null,
   token: localStorage.getItem(TOKEN_KEY),
   isAuthenticated: false,
-  isLoading: true,
+  isLoading: false,
+  isInitializing: true,
   error: null,
 
   clearError: () => set({ error: null }),
@@ -102,12 +104,12 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   initAuth: async () => {
     const token = localStorage.getItem(TOKEN_KEY);
     if (!token) {
-      set({ user: null, token: null, isAuthenticated: false, isLoading: false });
+      set({ user: null, token: null, isAuthenticated: false, isLoading: false, isInitializing: false });
       return;
     }
 
     if (token.startsWith('demo_token_')) {
-      set({ user: FALLBACK_DEMO_USER, token, isAuthenticated: true, isLoading: false });
+      set({ user: FALLBACK_DEMO_USER, token, isAuthenticated: true, isLoading: false, isInitializing: false });
       return;
     }
 
@@ -121,7 +123,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       if (res.ok) {
         const data = await parseResponse(res);
         if (data && data.user) {
-          set({ user: data.user, token, isAuthenticated: true, isLoading: false });
+          set({ user: data.user, token, isAuthenticated: true, isLoading: false, isInitializing: false });
           return;
         }
       } else if (res.status === 404) {
@@ -129,7 +131,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         if (localSaved) {
           try {
             const user = JSON.parse(localSaved);
-            set({ user, token, isAuthenticated: true, isLoading: false });
+            set({ user, token, isAuthenticated: true, isLoading: false, isInitializing: false });
             return;
           } catch {
             // ignore
@@ -137,25 +139,32 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         }
       }
       localStorage.removeItem(TOKEN_KEY);
-      set({ user: null, token: null, isAuthenticated: false, isLoading: false });
+      set({ user: null, token: null, isAuthenticated: false, isLoading: false, isInitializing: false });
     } catch (err) {
       const localSaved = localStorage.getItem(`bizpulse_user_${token}`);
       if (localSaved) {
         try {
           const user = JSON.parse(localSaved);
-          set({ user, token, isAuthenticated: true, isLoading: false });
+          set({ user, token, isAuthenticated: true, isLoading: false, isInitializing: false });
           return;
         } catch {
           // ignore
         }
       }
-      set({ isLoading: false });
+      set({ isLoading: false, isInitializing: false });
     }
   },
 
-  login: async (email, password) => {
+  login: async (email, password, rememberMe = false) => {
     set({ isLoading: true, error: null });
     const normalizedEmail = email.toLowerCase().trim();
+
+    if (rememberMe) {
+      localStorage.setItem('bizpulse_remembered_email', normalizedEmail);
+    } else {
+      localStorage.removeItem('bizpulse_remembered_email');
+    }
+
     try {
       const res = await fetch('/api/auth/login', {
         method: 'POST',
@@ -303,6 +312,12 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
     if (!payload.password || payload.password.length < 8) {
       const msg = 'Password must be at least 8 characters long.';
+      set({ isLoading: false, error: msg });
+      return { success: false, error: msg };
+    }
+
+    if (!/[A-Z]/.test(payload.password) || !/[a-z]/.test(payload.password) || !/[0-9]/.test(payload.password)) {
+      const msg = 'Password must include at least one uppercase letter, one lowercase letter, and one number.';
       set({ isLoading: false, error: msg });
       return { success: false, error: msg };
     }

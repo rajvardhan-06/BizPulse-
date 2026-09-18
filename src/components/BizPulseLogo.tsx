@@ -2,7 +2,7 @@ import React from 'react';
 
 export interface BizPulseLogoProps {
   className?: string;
-  size?: 'sm' | 'md' | 'lg' | 'xl' | number;
+  size?: 'sm' | 'md' | 'lg' | 'xl' | 'responsive' | number;
   showText?: boolean;
   animated?: boolean;
   lightText?: boolean;
@@ -15,12 +15,14 @@ export const BizPulseLogo: React.FC<BizPulseLogoProps> = ({
   animated = false,
   lightText = false
 }) => {
+  const isResponsive = size === 'responsive';
   const defaultDimensions = { icon: 40, text: 'text-2xl', subtext: 'text-[11px]' };
   const sizeMap: Record<string, typeof defaultDimensions> = {
     sm: { icon: 28, text: 'text-lg', subtext: 'text-[9px]' },
     md: { icon: 40, text: 'text-2xl', subtext: 'text-[11px]' },
     lg: { icon: 64, text: 'text-3xl', subtext: 'text-xs' },
-    xl: { icon: 96, text: 'text-5xl', subtext: 'text-sm' }
+    xl: { icon: 96, text: 'text-5xl', subtext: 'text-sm' },
+    responsive: { icon: 34, text: 'text-xl sm:text-2xl', subtext: 'text-[10px] sm:text-[11px]' }
   };
 
   const dimensions = typeof size === 'number'
@@ -44,7 +46,7 @@ export const BizPulseLogo: React.FC<BizPulseLogoProps> = ({
           viewBox="0 0 100 115"
           fill="none"
           xmlns="http://www.w3.org/2000/svg"
-          className={animated ? 'animate-pulse' : ''}
+          className={`${animated ? 'animate-pulse' : ''} ${isResponsive ? 'w-[30px] h-[34.5px] sm:w-[40px] sm:h-[46px]' : ''}`}
         >
           {/* Definitions for glow and gradients */}
           <defs>

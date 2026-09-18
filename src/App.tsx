@@ -23,13 +23,24 @@ import Statistic from './views/Statistic';
 import Wallet from './views/Wallet';
 import Profile from './views/Profile';
 import OpeningSplashScreen from './components/OpeningSplashScreen';
+import { BizPulseLogo } from './components/BizPulseLogo';
 
 // Helper to redirect authenticated users away from Login/Signup back to Dashboard
 function PublicAuthOnly({ children }: { children: React.ReactNode }) {
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
-  const isLoading = useAuthStore((state) => state.isLoading);
+  const isInitializing = useAuthStore((state) => state.isInitializing);
 
-  if (isLoading) return null;
+  if (isInitializing) {
+    return (
+      <div className="min-h-screen bg-[#F6F9FC] dark:bg-[#0B132B] flex flex-col items-center justify-center p-4">
+        <div className="flex flex-col items-center space-y-4">
+          <BizPulseLogo size="md" />
+          <div className="w-5 h-5 border-2 border-[#1677FF]/30 border-t-[#1677FF] rounded-full animate-spin" />
+        </div>
+      </div>
+    );
+  }
+
   if (isAuthenticated) {
     return <Navigate to="/" replace />;
   }

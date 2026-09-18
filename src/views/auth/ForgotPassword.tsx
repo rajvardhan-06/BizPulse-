@@ -1,7 +1,13 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Mail, Sparkles, ArrowRight, ArrowLeft, CheckCircle2, AlertCircle, KeyRound } from 'lucide-react';
+import { Mail, ArrowRight, ArrowLeft, CheckCircle2, KeyRound } from 'lucide-react';
 import { useAuthStore } from '../../authStore';
+import {
+  AuthLayout,
+  FormField,
+  PrimaryButton,
+  AuthErrorMessage
+} from '../../components/auth';
 
 export default function ForgotPassword() {
   const { forgotPassword, isLoading } = useAuthStore();
@@ -14,146 +20,126 @@ export default function ForgotPassword() {
     e.preventDefault();
     setErrorMsg(null);
 
+    const cleanEmail = email.trim();
+    if (!cleanEmail) {
+      setErrorMsg('Please enter your business email address.');
+      return;
+    }
+
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(email.trim())) {
+    if (!emailRegex.test(cleanEmail)) {
       setErrorMsg('Please enter a valid email address.');
       return;
     }
 
-    const res = await forgotPassword(email.trim());
+    const res = await forgotPassword(cleanEmail);
     if (res.success) {
       setSubmitted(true);
       if (res.resetToken) {
         setDemoToken(res.resetToken);
       }
     } else {
-      setErrorMsg(res.error || 'Failed to submit request.');
+      setErrorMsg(res.error || 'Failed to submit recovery request.');
     }
   };
 
   return (
-    <div className="min-h-screen bg-[#F4FAF9] dark:bg-gray-950 flex flex-col justify-center py-12 sm:px-6 lg:px-8 transition-colors duration-300">
-      
-      {/* Brand Header */}
-      <div className="sm:mx-auto sm:w-full sm:max-w-md text-center px-4">
-        <Link to="/" className="inline-flex items-center space-x-3 mb-6 group">
-          <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-[#028090] to-[#02C39A] flex items-center justify-center shadow-lg shadow-[#028090]/20 group-hover:scale-105 transition-transform">
-            <Sparkles className="w-6 h-6 text-white" />
-          </div>
-          <span className="font-serif text-3xl font-bold text-[#0B2E33] dark:text-gray-100 tracking-tight">BizPulse</span>
+    <AuthLayout
+      title="Reset your password"
+      subtitle="Enter your business email to receive recovery instructions."
+      maxWidth="md"
+      footerContent={
+        <Link
+          to="/login"
+          className="inline-flex items-center space-x-1.5 font-semibold text-[#1677FF] hover:text-[#0E62D9] dark:text-[#3B82F6] hover:underline"
+        >
+          <ArrowLeft className="w-4 h-4" />
+          <span>Return to login</span>
         </Link>
+      }
+    >
+      {submitted ? (
+        <div className="text-center space-y-4 py-2 animate-in fade-in">
+          <div className="w-12 h-12 rounded-full bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-[#16A34A] flex items-center justify-center mx-auto shadow-xs">
+            <CheckCircle2 className="w-6 h-6" />
+          </div>
 
-        <h1 className="text-2xl sm:text-3xl font-serif font-bold text-[#0B2E33] dark:text-gray-100">
-          Reset your password
-        </h1>
-        <p className="mt-2 text-sm text-[#5C7A7D] dark:text-gray-400 max-w-sm mx-auto">
-          Enter the email address linked to your business account to receive recovery instructions.
-        </p>
-      </div>
+          <div>
+            <h2 className="text-base font-bold text-[#102A43] dark:text-slate-100 mb-1.5">
+              Check your inbox
+            </h2>
+            <p className="text-xs sm:text-sm text-[#627D98] dark:text-slate-400 leading-relaxed">
+              If an account is registered with{' '}
+              <span className="font-semibold text-[#102A43] dark:text-slate-200">{email}</span>,
+              we have sent instructions to reset your password.
+            </p>
+          </div>
 
-      {/* Card Container */}
-      <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md px-4 sm:px-0">
-        <div className="bg-white dark:bg-gray-900 py-8 px-6 sm:px-10 shadow-xl shadow-teal-900/5 rounded-3xl border border-teal-100/60 dark:border-gray-800">
-          
-          {submitted ? (
-            <div className="text-center space-y-5 animate-in fade-in zoom-in-95">
-              <div className="w-14 h-14 rounded-2xl bg-teal-50 dark:bg-teal-950/50 border border-teal-200 dark:border-teal-800 text-[#028090] dark:text-[#02C39A] flex items-center justify-center mx-auto shadow-sm">
-                <CheckCircle2 className="w-8 h-8" />
+          {demoToken && (
+            <div className="p-3.5 rounded-xl bg-blue-50/70 dark:bg-slate-800/90 border border-blue-200 dark:border-blue-900/60 text-left space-y-2">
+              <div className="flex items-center space-x-2 text-xs font-bold text-[#1677FF] dark:text-[#3B82F6] uppercase tracking-wide">
+                <KeyRound className="w-4 h-4" />
+                <span>Immediate Reset Token (Preview Sandbox)</span>
               </div>
-
-              <div>
-                <h3 className="text-lg font-bold text-[#0B2E33] dark:text-gray-100 mb-2">Check your inbox</h3>
-                <p className="text-sm text-[#5C7A7D] dark:text-gray-400 leading-relaxed">
-                  If an account is associated with <span className="font-semibold text-[#0B2E33] dark:text-gray-200">{email}</span>, you will receive password reset instructions.
-                </p>
-              </div>
-
-              {demoToken && (
-                <div className="p-4 rounded-2xl bg-teal-50/70 dark:bg-gray-800/80 border border-teal-200 dark:border-teal-900 text-left space-y-2">
-                  <div className="flex items-center space-x-2 text-xs font-bold text-[#028090] dark:text-[#02C39A] uppercase tracking-wider">
-                    <KeyRound className="w-4 h-4" />
-                    <span>Immediate Reset Link (Preview Sandbox)</span>
-                  </div>
-                  <p className="text-xs text-[#5C7A7D] dark:text-gray-400">
-                    In this preview container environment, click below to test the password reset screen directly:
-                  </p>
-                  <Link
-                    to={`/reset-password?token=${demoToken}`}
-                    className="inline-flex items-center space-x-2 py-2.5 px-4 rounded-xl bg-[#028090] text-white text-xs font-semibold hover:bg-[#00A896] transition-colors"
-                  >
-                    <span>Proceed to Password Reset</span>
-                    <ArrowRight className="w-3.5 h-3.5" />
-                  </Link>
-                </div>
-              )}
-
-              <div className="pt-4 border-t border-gray-100 dark:border-gray-800">
-                <Link
-                  to="/login"
-                  className="inline-flex items-center space-x-2 text-sm font-semibold text-[#028090] dark:text-[#02C39A] hover:underline"
-                >
-                  <ArrowLeft className="w-4 h-4" />
-                  <span>Return to Login</span>
-                </Link>
-              </div>
-            </div>
-          ) : (
-            <form onSubmit={handleSubmit} className="space-y-5">
-              {errorMsg && (
-                <div className="p-4 rounded-2xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 text-rose-800 dark:text-rose-200 text-sm flex items-start space-x-3">
-                  <AlertCircle className="w-5 h-5 shrink-0 mt-0.5 text-rose-600 dark:text-rose-400" />
-                  <div className="flex-1 font-medium">{errorMsg}</div>
-                </div>
-              )}
-
-              <div>
-                <label className="block text-xs font-bold text-[#0B2E33] dark:text-gray-300 uppercase tracking-wider mb-2">
-                  Registered Email Address
-                </label>
-                <div className="relative rounded-2xl shadow-sm">
-                  <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-gray-400">
-                    <Mail className="w-5 h-5" />
-                  </div>
-                  <input
-                    type="email"
-                    required
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    placeholder="merchant@yourbusiness.com"
-                    className="w-full pl-11 pr-4 py-3.5 bg-gray-50/50 dark:bg-gray-800/60 border border-gray-200 dark:border-gray-700 rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-[#028090] text-[#0B2E33] dark:text-gray-100 placeholder-gray-400 transition-all"
-                  />
-                </div>
-              </div>
-
-              <button
-                type="submit"
-                disabled={isLoading}
-                className="w-full flex items-center justify-center py-4 px-6 rounded-2xl shadow-lg shadow-[#028090]/25 bg-gradient-to-r from-[#028090] to-[#00A896] hover:from-[#00A896] hover:to-[#02C39A] text-white font-semibold text-sm transition-all transform active:scale-[0.98] disabled:opacity-60"
+              <p className="text-xs text-[#627D98] dark:text-slate-400">
+                In this preview container sandbox, click below to proceed directly to the reset screen:
+              </p>
+              <Link
+                to={`/reset-password?token=${demoToken}`}
+                className="inline-flex items-center space-x-2 py-2 px-3.5 rounded-lg bg-[#1677FF] text-white text-xs font-semibold hover:bg-[#0E62D9] transition-colors shadow-xs"
               >
-                {isLoading ? (
-                  <span>Sending instructions...</span>
-                ) : (
-                  <div className="flex items-center space-x-2">
-                    <span>Send Recovery Instructions</span>
-                    <ArrowRight className="w-4 h-4" />
-                  </div>
-                )}
-              </button>
-
-              <div className="pt-4 border-t border-gray-100 dark:border-gray-800 text-center">
-                <Link
-                  to="/login"
-                  className="inline-flex items-center space-x-1.5 text-xs font-semibold text-[#5C7A7D] hover:text-[#028090] dark:text-gray-400 dark:hover:text-gray-200 transition-colors"
-                >
-                  <ArrowLeft className="w-3.5 h-3.5" />
-                  <span>Remember password? Log In</span>
-                </Link>
-              </div>
-            </form>
+                <span>Proceed to Password Reset</span>
+                <ArrowRight className="w-3.5 h-3.5" />
+              </Link>
+            </div>
           )}
 
+          <div className="pt-3">
+            <Link
+              to="/login"
+              className="w-full flex items-center justify-center min-h-[44px] py-2.5 px-4 rounded-xl border border-[#E4EAF0] dark:border-slate-700 text-xs sm:text-sm font-semibold text-[#102A43] dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 transition"
+            >
+              Back to Sign In
+            </Link>
+          </div>
         </div>
-      </div>
-    </div>
+      ) : (
+        <form onSubmit={handleSubmit} noValidate className="space-y-3.5 sm:space-y-4 w-full box-border">
+          {errorMsg && (
+            <AuthErrorMessage
+              message={errorMsg}
+              onDismiss={() => setErrorMsg(null)}
+            />
+          )}
+
+          <FormField
+            id="forgot-email"
+            label="Registered Business Email"
+            type="email"
+            requiredIndicator
+            autoComplete="email"
+            placeholder="name@business.com"
+            value={email}
+            onChange={(e) => {
+              setEmail(e.target.value);
+              if (errorMsg) setErrorMsg(null);
+            }}
+            icon={<Mail className="w-4 h-4 text-[#627D98] dark:text-slate-400" />}
+            disabled={isLoading}
+          />
+
+          <div className="pt-1">
+            <PrimaryButton
+              type="submit"
+              isLoading={isLoading}
+              loadingText="Sending instructions..."
+            >
+              <span>Send Recovery Instructions</span>
+              <ArrowRight className="w-4 h-4" />
+            </PrimaryButton>
+          </div>
+        </form>
+      )}
+    </AuthLayout>
   );
 }

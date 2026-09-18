@@ -2,14 +2,14 @@ import React, { useEffect } from 'react';
 import { Navigate, useLocation, Outlet } from 'react-router-dom';
 import { useAuthStore } from '../authStore';
 import { useStore } from '../store';
-import { Sparkles } from 'lucide-react';
+import { BizPulseLogo } from './BizPulseLogo';
 
 interface ProtectedRouteProps {
   children?: React.ReactNode;
 }
 
 export default function ProtectedRoute({ children }: ProtectedRouteProps) {
-  const { isAuthenticated, isLoading, user, token } = useAuthStore();
+  const { isAuthenticated, isInitializing, user, token } = useAuthStore();
   const { switchUserContext, activeUserId } = useStore();
   const location = useLocation();
 
@@ -24,16 +24,16 @@ export default function ProtectedRoute({ children }: ProtectedRouteProps) {
     }
   }, [isAuthenticated, user?.id, activeUserId, token, switchUserContext]);
 
-  if (isLoading) {
+  if (isInitializing) {
     return (
-      <div className="min-h-screen w-full flex flex-col items-center justify-center bg-[#F4FAF9] dark:bg-gray-950 text-[#0B2E33] dark:text-gray-100">
-        <div className="relative flex items-center justify-center mb-6">
-          <div className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-[#028090] to-[#02C39A] animate-pulse flex items-center justify-center shadow-lg">
-            <Sparkles className="w-8 h-8 text-white" />
+      <div className="min-h-screen w-full flex flex-col items-center justify-center bg-[#F6F9FC] dark:bg-[#0B132B] text-[#102A43] dark:text-slate-100">
+        <div className="flex flex-col items-center space-y-4">
+          <BizPulseLogo size="md" />
+          <div className="flex items-center space-x-2 text-xs text-[#627D98] dark:text-slate-400 font-medium">
+            <div className="w-4 h-4 border-2 border-[#1677FF]/30 border-t-[#1677FF] rounded-full animate-spin" />
+            <span>Securing business workspace...</span>
           </div>
         </div>
-        <h2 className="text-xl font-serif font-bold tracking-tight mb-2 text-[#0B2E33] dark:text-gray-100">BizPulse</h2>
-        <p className="text-xs text-[#5C7A7D] dark:text-gray-400 font-medium">Securing business workspace...</p>
       </div>
     );
   }
@@ -49,3 +49,4 @@ export default function ProtectedRoute({ children }: ProtectedRouteProps) {
 
   return children ? <>{children}</> : <Outlet />;
 }
+
