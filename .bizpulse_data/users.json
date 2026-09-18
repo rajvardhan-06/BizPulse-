@@ -1,0 +1,99 @@
+[
+  {
+    "id": "usr_9afff035d743ead169860b70",
+    "email": "ramesh@patelstore.com",
+    "passwordHash": "2aff3d7c82aa25218c1718a03901f245bee63c20a7df2640e33018aa01457773f8b97ff30eb2d97a353762e4ce6f4ea1a1c28bd6e99c57bc19d4cb92c535e6d4",
+    "salt": "e936697956d1abc3f89174d1e72e3d43",
+    "fullName": "Ramesh Patel",
+    "createdAt": "2026-09-17T14:24:42.530Z",
+    "emailVerified": true,
+    "onboardingCompleted": false,
+    "businessProfile": {
+      "businessName": "Patel Supermart",
+      "businessType": "Retail Shop",
+      "businessCategory": "General Merchandise",
+      "ownerName": "Ramesh Patel",
+      "businessEmail": "ramesh@patelstore.com",
+      "phoneNumber": "",
+      "address": "",
+      "cityState": "",
+      "currency": "INR",
+      "reportingPeriod": "monthly",
+      "gstNumber": ""
+    },
+    "settings": {
+      "theme": "light",
+      "currency": "INR",
+      "reportingPeriod": "monthly",
+      "defaultCategory": "Inventory / Stock",
+      "alertPreferences": {
+        "budgetAlerts": true,
+        "priceChangeAlerts": true,
+        "lowStockAlerts": true,
+        "unusualSpendingAlerts": true,
+        "productNotifications": false
+      }
+    },
+    "data": {
+      "receipts": [],
+      "inventoryAdjustments": [],
+      "inventorySettings": {},
+      "budgets": [],
+      "suppliers": [],
+      "chatHistory": []
+    }
+  },
+  {
+    "id": "usr_d069f0a4850ea5bf3186eef6",
+    "email": "anita@sharmatraders.com",
+    "passwordHash": "1082ee8fb597fdee85e438ffe3ecd2edcfc1dda3003ec2b22e6d74bfc454b2df1612f6dbde89c666ce82bb6cd2a945fff1c1f3f622c168717ae44246be65f49b",
+    "salt": "b5575fab876105d5f6ffc733c05f2999",
+    "fullName": "Anita Sharma",
+    "createdAt": "2026-09-17T14:25:10.126Z",
+    "emailVerified": true,
+    "onboardingCompleted": false,
+    "businessProfile": {
+      "businessName": "Sharma Wholesale",
+      "businessType": "Retail Shop",
+      "businessCategory": "General Merchandise",
+      "ownerName": "Anita Sharma",
+      "businessEmail": "anita@sharmatraders.com",
+      "phoneNumber": "",
+      "address": "",
+      "cityState": "",
+      "currency": "INR",
+      "reportingPeriod": "monthly",
+      "gstNumber": ""
+    },
+    "settings": {
+      "theme": "light",
+      "currency": "INR",
+      "reportingPeriod": "monthly",
+      "defaultCategory": "Inventory / Stock",
+      "alertPreferences": {
+        "budgetAlerts": true,
+        "priceChangeAlerts": true,
+        "lowStockAlerts": true,
+        "unusualSpendingAlerts": true,
+        "productNotifications": false
+      }
+    },
+    "data": {
+      "receipts": [
+        {
+          "id": "rec_anita_1",
+          "merchant": "Anita Wholesale Hub",
+          "date": "2026-09-17",
+          "total": 5000,
+          "currency": "INR",
+          "items": []
+        }
+      ],
+      "inventoryAdjustments": [],
+      "inventorySettings": {},
+      "budgets": [],
+      "suppliers": [],
+      "chatHistory": []
+    }
+  }
+]

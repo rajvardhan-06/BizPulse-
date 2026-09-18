@@ -1,0 +1,10 @@
+{
+  "name": "Remix Remix Remix Remix Receipt Intelligence Network",
+  "description": "Turn real receipt photos into structured financial intelligence with AI.",
+  "requestFramePermissions": [
+    "camera"
+  ],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
