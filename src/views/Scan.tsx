@@ -130,13 +130,12 @@ export default function Scan() {
     } catch (err: any) {
       clearTimeout(timeoutId);
       if (err.name === 'AbortError') {
-        if (status === 'processing' && !abortControllerRef.current?.signal.aborted) {
-        } else if (err.message.includes('timeout') || err.message === 'The user aborted a request.') {
-            setErrorMsg('Receipt analysis is taking too long. Please try again.');
-            setStatus('error');
+        if (err.message?.includes('timeout') || err.message === 'The user aborted a request.') {
+          setErrorMsg('Receipt analysis is taking too long. Please try again.');
+          setStatus('error');
         } else {
-            setErrorMsg('Receipt analysis cancelled or timed out.');
-            setStatus('error');
+          setErrorMsg('Receipt analysis cancelled or timed out.');
+          setStatus('error');
         }
       } else {
         setErrorMsg(err.message || "We couldn't read this receipt reliably.");

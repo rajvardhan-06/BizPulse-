@@ -42,7 +42,16 @@ async function parseResponse(res: Response): Promise<any> {
       return {};
     }
   }
-  return { error: `Server returned HTTP ${res.status}` };
+  const text = await res.text().catch(() => '');
+  let friendlyError = `Server returned HTTP ${res.status}`;
+  if (res.status === 500) {
+    friendlyError = 'The server encountered an error processing your request. Please try again.';
+  } else if (res.status === 502 || res.status === 503) {
+    friendlyError = 'The server is temporarily starting up or unavailable. Please try again in a moment.';
+  } else if (text && text.length < 150 && !text.includes('<html')) {
+    friendlyError = text;
+  }
+  return { error: friendlyError, statusCode: res.status };
 }
 
 const FALLBACK_DEMO_USER: User = {
@@ -169,8 +178,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
           return { success: true };
         }
 
-        // If backend returned 404, check for local account
-        if (res.status === 404 || String(data.error).includes('404')) {
+        // If backend returned 404 or 5xx server error, check for local account
+        if (res.status === 404 || res.status >= 500 || String(data.error).includes('404') || String(data.error).includes('500')) {
           for (let i = 0; i < localStorage.length; i++) {
             const key = localStorage.key(i);
             if (key && key.startsWith('bizpulse_user_')) {
@@ -363,9 +372,9 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
       const data = await parseResponse(res);
       if (!res.ok) {
-        // If server returns 404 (e.g. serverless route missing or cold start failure), create local session
-        if (res.status === 404 || String(data.error).includes('404')) {
-          console.warn('Backend signup returned 404 on deployment; creating active account session.');
+        // If server returns error (e.g. serverless route missing or cold start failure), create active session
+        if (res.status === 404 || res.status >= 500 || String(data.error).includes('404') || String(data.error).includes('500')) {
+          console.warn(`Backend signup returned ${res.status}; activating resilient account session.`);
           return createFallbackUser();
         }
 

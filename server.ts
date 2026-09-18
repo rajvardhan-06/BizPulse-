@@ -10,9 +10,7 @@ import { authRouter, requireAuth, optionalAuth, AuthenticatedRequest } from './s
 const app = express();
 const PORT = 3000;
 
-app.use(express.json({ limit: '50mb' }));
-
-// CORS & Serverless URL Normalization
+// 1. CORS & Security headers
 app.use((req, res, next) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS, PATCH');
@@ -21,29 +19,99 @@ app.use((req, res, next) => {
   if (req.method === 'OPTIONS') {
     return res.status(200).end();
   }
+  next();
+});
 
-  // If running in a serverless environment and URL was forwarded
-  const forwardedUri = (req.headers['x-forwarded-uri'] || req.headers['x-matched-path'] || req.headers['x-original-url']) as string;
-  if (forwardedUri && typeof forwardedUri === 'string' && (req.url === '/' || req.url === '/api' || req.url === '/api/' || req.url.startsWith('/?'))) {
-    req.url = forwardedUri;
+// 2. Serverless URL Normalization (handles Vercel rewrites and query-based path forwarding)
+app.use((req, res, next) => {
+  let targetPath = '';
+
+  // Check query parameter from Vercel rewrite (?__path=...)
+  if (req.query && req.query.__path) {
+    targetPath = String(req.query.__path);
+  }
+  // Check query parameter from Vercel catch-all (?path=...)
+  else if (req.query && req.query.path) {
+    targetPath = Array.isArray(req.query.path) ? req.query.path.join('/') : String(req.query.path);
+  }
+  // Check Vercel route matches header
+  else if (req.headers && req.headers['x-now-route-matches']) {
+    const match = String(req.headers['x-now-route-matches']).match(/1=([^&]+)/);
+    if (match && match[1]) {
+      targetPath = decodeURIComponent(match[1]);
+    }
+  }
+  // Check x-forwarded-uri header (if not just /api)
+  else if (req.headers && req.headers['x-forwarded-uri']) {
+    const fUri = String(req.headers['x-forwarded-uri']);
+    if (fUri !== '/api' && fUri !== '/api/') {
+      targetPath = fUri;
+    }
+  }
+
+  if (targetPath) {
+    targetPath = targetPath.replace(/^\/+/, '');
+    req.url = `/api/${targetPath}`;
   }
 
   next();
 });
 
-// Health check endpoint for deployment validation
-app.get(['/api/health', '/health'], (req, res) => {
+// 3. Pre-parsed body handling for Vercel serverless functions (prevents body-parser stream hang)
+app.use((req, res, next) => {
+  if (req.body !== undefined && req.body !== null) {
+    (req as any)._body = true;
+    if (typeof req.body === 'string') {
+      try {
+        req.body = JSON.parse(req.body);
+      } catch {
+        // Keep as string if not JSON
+      }
+    }
+  }
+  next();
+});
+
+// 4. Standard Express body parsers
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ extended: true, limit: '50mb' }));
+
+// 5. Body safety fallback for POST/PUT/PATCH to prevent destructuring TypeErrors
+app.use((req, res, next) => {
+  if (['POST', 'PUT', 'PATCH'].includes(req.method) && (!req.body || typeof req.body !== 'object')) {
+    req.body = {};
+  }
+  next();
+});
+
+// 6. Detailed server-side logging for API routes only
+app.use((req, res, next) => {
+  if (req.url.startsWith('/api') || req.url.startsWith('/health')) {
+    const start = Date.now();
+    res.on('finish', () => {
+      const duration = Date.now() - start;
+      console.log(`[API ${req.method}] ${req.url} -> ${res.statusCode} (${duration}ms)`);
+    });
+  }
+  next();
+});
+
+// Health check endpoint for deployment validation and uptime checks
+app.get(['/api/health', '/health', '/api', '/api/'], (req, res) => {
   res.json({
     status: 'ok',
+    environment: process.env.NODE_ENV || 'development',
+    isVercel: Boolean(process.env.VERCEL || process.env.VERCEL_ENV || process.env.NOW_REGION),
     geminiConfigured: Boolean(process.env.GEMINI_API_KEY),
     model: process.env.GEMINI_MODEL || 'gemini-3.1-flash-lite',
     timestamp: new Date().toISOString()
   });
 });
 
-// Mount Auth routes for both /api/auth and /auth
+// Mount Auth routes for /api/auth, /auth, and direct /api
 app.use('/api/auth', authRouter);
 app.use('/auth', authRouter);
+app.use('/api', authRouter);
 
 // Init Gemini lazily / securely
 function getGenAI() {
@@ -269,6 +337,27 @@ Please provide an accurate, grounded, helpful response based on the confirmed bu
   }
 });
 
+// Catch unmatched API routes so they always return a clean JSON 404 instead of HTML
+app.all('/api/*', (req, res) => {
+  res.status(404).json({
+    error: `API endpoint not found: ${req.method} ${req.originalUrl || req.url}`,
+    code: 'NOT_FOUND'
+  });
+});
+
+// Global Express error handler to safely catch unhandled exceptions and prevent default HTML 500
+app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
+  console.error('[API Unhandled Error]:', err);
+  if (res.headersSent) {
+    return next(err);
+  }
+  const statusCode = err.status || err.statusCode || 500;
+  res.status(statusCode).json({
+    error: err.message || 'Internal Server Error',
+    code: err.code || 'INTERNAL_ERROR'
+  });
+});
+
 async function startServer() {
   const isProd = process.env.NODE_ENV === 'production';
   const httpServer = http.createServer(app);
@@ -307,11 +396,6 @@ async function startServer() {
       // Gracefully prevent unhandled socket errors
       console.warn('WebSocket client error caught:', err.message);
     });
-  });
-
-  // Catch unmatched API routes so they return JSON error instead of index.html
-  app.all('/api/*', (req, res) => {
-    res.status(404).json({ error: `API endpoint not found: ${req.method} ${req.path}`, code: 'NOT_FOUND' });
   });
 
   if (!isProd) {

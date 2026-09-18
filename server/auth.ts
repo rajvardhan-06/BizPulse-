@@ -436,6 +436,14 @@ export function optionalAuth(req: AuthenticatedRequest, res: Response, next: Nex
 
 export const authRouter = Router();
 
+// Ensure req.body is safely initialized as an object to prevent any destructuring errors
+authRouter.use((req, res, next) => {
+  if (!req.body || typeof req.body !== 'object') {
+    req.body = {};
+  }
+  next();
+});
+
 // 1. SIGNUP
 authRouter.post('/signup', (req: Request, res: Response) => {
   try {
@@ -444,7 +452,7 @@ authRouter.post('/signup', (req: Request, res: Response) => {
       return res.status(429).json({ error: 'Too many signup attempts. Please try again later.' });
     }
 
-    const { fullName, email, password, confirmPassword, businessName, phoneNumber } = req.body;
+    const { fullName, email, password, confirmPassword, businessName, phoneNumber } = req.body || {};
 
     if (!fullName || typeof fullName !== 'string' || fullName.trim().length < 2) {
       return res.status(400).json({ error: 'Please provide your full name (at least 2 characters).' });
@@ -555,7 +563,7 @@ authRouter.post('/signup', (req: Request, res: Response) => {
 // 2. LOGIN
 authRouter.post('/login', (req: Request, res: Response) => {
   try {
-    const { email, password } = req.body;
+    const { email, password } = req.body || {};
     const ip = req.ip || 'unknown';
     const rateLimitKey = `login_${ip}_${(email || '').trim().toLowerCase()}`;
 

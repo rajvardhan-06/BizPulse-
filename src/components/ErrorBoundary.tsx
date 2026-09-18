@@ -11,18 +11,8 @@ interface ErrorBoundaryState {
   error: Error | null;
 }
 
-// React 19 component base class compatibility
-const BaseComponent = React.Component as unknown as {
-  new (props: ErrorBoundaryProps): {
-    props: ErrorBoundaryProps;
-    state: ErrorBoundaryState;
-    setState(state: Partial<ErrorBoundaryState> | ((prevState: ErrorBoundaryState) => Partial<ErrorBoundaryState>)): void;
-    render(): ReactNode;
-  };
-};
-
-export class ErrorBoundary extends BaseComponent {
-  public state: ErrorBoundaryState = {
+export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundaryState> {
+  public override state: ErrorBoundaryState = {
     hasError: false,
     error: null,
   };
