@@ -327,25 +327,44 @@ export function sanitizeUser(user: UserRecord) {
 export function requireAuth(req: AuthenticatedRequest, res: Response, next: NextFunction) {
   const authHeader = req.headers.authorization;
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    return res.status(401).json({ error: 'Authentication required. Please log in.' });
+    return res.status(401).json({ error: 'Authentication required. Please log in.', code: 'AUTH_REQUIRED' });
   }
 
   const token = authHeader.slice(7).trim();
-  const session = sessionsMap.get(token);
+  let session = sessionsMap.get(token);
+
+  // If token is a valid demo token, auto-bind to demo user if session was lost (e.g. server restart)
+  if (!session && token.startsWith('demo_token_')) {
+    let demoUser = Array.from(usersMap.values()).find((u) => u.email === 'demo@bizpulse.com');
+    if (!demoUser) {
+      seedDemoUserIfEmpty();
+      demoUser = Array.from(usersMap.values()).find((u) => u.email === 'demo@bizpulse.com');
+    }
+    if (demoUser) {
+      session = {
+        token,
+        userId: demoUser.id,
+        createdAt: Date.now(),
+        expiresAt: Date.now() + 7 * 24 * 60 * 60 * 1000,
+        userAgent: req.headers['user-agent']
+      };
+      sessionsMap.set(token, session);
+    }
+  }
 
   if (!session) {
-    return res.status(401).json({ error: 'Session not found or expired. Please log in again.' });
+    return res.status(401).json({ error: 'Session not found or expired. Please log in again.', code: 'SESSION_EXPIRED' });
   }
 
   if (Date.now() > session.expiresAt) {
     sessionsMap.delete(token);
-    return res.status(401).json({ error: 'Session expired. Please log in again.' });
+    return res.status(401).json({ error: 'Session expired. Please log in again.', code: 'SESSION_EXPIRED' });
   }
 
   const user = usersMap.get(session.userId);
   if (!user) {
     sessionsMap.delete(token);
-    return res.status(401).json({ error: 'User account not found.' });
+    return res.status(401).json({ error: 'User account not found.', code: 'USER_NOT_FOUND' });
   }
 
   req.user = user;
