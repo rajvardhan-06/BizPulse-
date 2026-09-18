@@ -208,18 +208,36 @@ app.post(['/api/extract', '/extract'], async (req, res) => {
       }
     };
 
+    const executeWithTimeout = async <T>(promise: Promise<T>, timeoutMs = 20000): Promise<T> => {
+      let timer: NodeJS.Timeout;
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        timer = setTimeout(() => {
+          const timeoutErr: any = new Error('Receipt extraction request timed out.');
+          timeoutErr.code = 'TIMEOUT';
+          reject(timeoutErr);
+        }, timeoutMs);
+      });
+      return Promise.race([promise, timeoutPromise]).finally(() => clearTimeout(timer));
+    };
+
     let response: any;
     try {
-      response = await ai.models.generateContent({
-        model: primaryModel,
-        ...extractPayload
-      });
+      response = await executeWithTimeout(
+        ai.models.generateContent({
+          model: primaryModel,
+          ...extractPayload
+        }),
+        18000
+      );
     } catch (primaryErr: any) {
       console.warn(`Extraction with ${primaryModel} failed, trying fallback ${fallbackModel}:`, primaryErr?.message || primaryErr);
-      response = await ai.models.generateContent({
-        model: fallbackModel,
-        ...extractPayload
-      });
+      response = await executeWithTimeout(
+        ai.models.generateContent({
+          model: fallbackModel,
+          ...extractPayload
+        }),
+        18000
+      );
     }
 
     const text = response.text;
@@ -319,18 +337,37 @@ Please provide an accurate, grounded, helpful response based on the confirmed bu
       }
     };
 
-    try {
-      const response = await ai.models.generateContent({
-        model: primaryModel,
-        ...chatPayload
+    // Protect against serverless function hangs by setting an execution timeout
+    const executeWithTimeout = async <T>(promise: Promise<T>, timeoutMs = 20000): Promise<T> => {
+      let timer: NodeJS.Timeout;
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        timer = setTimeout(() => {
+          const timeoutErr: any = new Error('The AI service request timed out.');
+          timeoutErr.code = 'TIMEOUT';
+          reject(timeoutErr);
+        }, timeoutMs);
       });
+      return Promise.race([promise, timeoutPromise]).finally(() => clearTimeout(timer));
+    };
+
+    try {
+      const response: any = await executeWithTimeout(
+        ai.models.generateContent({
+          model: primaryModel,
+          ...chatPayload
+        }),
+        15000
+      );
       replyText = response.text ? response.text.trim() : '';
     } catch (modelErr: any) {
       console.warn(`Primary chat model "${primaryModel}" failed, falling back to ${fallbackModel}:`, modelErr?.message || modelErr);
-      const fallbackResponse = await ai.models.generateContent({
-        model: fallbackModel,
-        ...chatPayload
-      });
+      const fallbackResponse: any = await executeWithTimeout(
+        ai.models.generateContent({
+          model: fallbackModel,
+          ...chatPayload
+        }),
+        15000
+      );
       replyText = fallbackResponse.text ? fallbackResponse.text.trim() : '';
     }
 
