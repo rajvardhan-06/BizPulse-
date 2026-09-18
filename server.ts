@@ -186,4 +186,8 @@ async function startServer() {
   });
 }
 
-startServer();
+if (process.env.NODE_ENV !== 'production' || process.env.RENDER || process.env.CLOUD_RUN || !process.env.VERCEL) {
+  startServer();
+}
+
+export default app;
