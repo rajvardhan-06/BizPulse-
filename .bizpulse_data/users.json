@@ -95,5 +95,245 @@
       "suppliers": [],
       "chatHistory": []
     }
+  },
+  {
+    "id": "usr_demo_patel_mart",
+    "email": "demo@bizpulse.com",
+    "passwordHash": "66865a2fd8361e0a08ceec349bf57a2287e8911a0beef7e96290e2754dfd43c115fabf434e58ea5fa9e5bd6968257b0c7f23dca861061ee8520754864518a5ac",
+    "salt": "49a419db532651f2b72dffb0225d816a",
+    "fullName": "Ramesh Patel",
+    "phoneNumber": "+91 98201 23456",
+    "createdAt": "2026-09-18T14:16:57.162Z",
+    "emailVerified": true,
+    "onboardingCompleted": true,
+    "businessProfile": {
+      "businessName": "Patel Supermart",
+      "businessType": "Retail Shop",
+      "businessCategory": "Groceries & Provisions",
+      "ownerName": "Ramesh Patel",
+      "businessEmail": "demo@bizpulse.com",
+      "phoneNumber": "+91 98201 23456",
+      "address": "Shop 4, Market Cross Road",
+      "cityState": "Mumbai, Maharashtra",
+      "currency": "INR",
+      "reportingPeriod": "monthly",
+      "gstNumber": "27AAAAA0000A1Z5"
+    },
+    "settings": {
+      "theme": "light",
+      "currency": "INR",
+      "reportingPeriod": "monthly",
+      "defaultCategory": "Inventory / Stock",
+      "alertPreferences": {
+        "budgetAlerts": true,
+        "priceChangeAlerts": true,
+        "lowStockAlerts": true,
+        "unusualSpendingAlerts": true,
+        "productNotifications": false
+      }
+    },
+    "data": {
+      "receipts": [
+        {
+          "id": "rec_demo_1",
+          "merchant": "Apex Wholesale Provisions",
+          "supplierId": "sup_apex",
+          "date": "2026-09-10",
+          "total": 12450,
+          "currency": "INR",
+          "captureTimestamp": 1789136217162,
+          "confirmed": true,
+          "status": "confirmed",
+          "items": [
+            {
+              "id": "item_1_1",
+              "name": "Fortune Sunflower Oil 5L",
+              "qty": 10,
+              "unit_price": 680,
+              "category": "Cooking Oil & Ghee",
+              "unit": "cans"
+            },
+            {
+              "id": "item_1_2",
+              "name": "India Gate Basmati Rice 25kg",
+              "qty": 4,
+              "unit_price": 1150,
+              "category": "Rice & Grains",
+              "unit": "bags"
+            },
+            {
+              "id": "item_1_3",
+              "name": "Tata Salt Iodized 1kg",
+              "qty": 40,
+              "unit_price": 26,
+              "category": "Spices & Seasonings",
+              "unit": "packets"
+            }
+          ]
+        },
+        {
+          "id": "rec_demo_2",
+          "merchant": "Sunrise Dairy & Agro",
+          "supplierId": "sup_sunrise",
+          "date": "2026-09-14",
+          "total": 8200,
+          "currency": "INR",
+          "captureTimestamp": 1789481817162,
+          "confirmed": true,
+          "status": "confirmed",
+          "items": [
+            {
+              "id": "item_2_1",
+              "name": "Amul Pasteurised Butter 500g",
+              "qty": 20,
+              "unit_price": 275,
+              "category": "Dairy & Frozen",
+              "unit": "blocks"
+            },
+            {
+              "id": "item_2_2",
+              "name": "Amul Taaza Milk 1L",
+              "qty": 45,
+              "unit_price": 60,
+              "category": "Dairy & Frozen",
+              "unit": "litres"
+            }
+          ]
+        },
+        {
+          "id": "rec_demo_3",
+          "merchant": "Apex Wholesale Provisions",
+          "supplierId": "sup_apex",
+          "date": "2026-09-16",
+          "total": 9400,
+          "currency": "INR",
+          "captureTimestamp": 1789654617162,
+          "confirmed": true,
+          "status": "confirmed",
+          "items": [
+            {
+              "id": "item_3_1",
+              "name": "Fortune Sunflower Oil 5L",
+              "qty": 8,
+              "unit_price": 720,
+              "category": "Cooking Oil & Ghee",
+              "unit": "cans"
+            },
+            {
+              "id": "item_3_2",
+              "name": "India Gate Basmati Rice 25kg",
+              "qty": 3,
+              "unit_price": 1210,
+              "category": "Rice & Grains",
+              "unit": "bags"
+            }
+          ]
+        }
+      ],
+      "inventoryAdjustments": [],
+      "inventorySettings": {
+        "fortune sunflower oil 5l": {
+          "reorderThreshold": 5
+        },
+        "amul taaza milk 1l": {
+          "reorderThreshold": 15
+        }
+      },
+      "budgets": [
+        {
+          "id": "bud_monthly_stock",
+          "name": "Monthly Store Purchases",
+          "amount": 50000,
+          "currency": "INR",
+          "period": "monthly",
+          "startDate": "2026-09-01",
+          "endDate": "2026-09-30",
+          "category": "",
+          "alertThreshold": 80,
+          "notes": "Target cap for all store restocks during September",
+          "createdAt": "2026-09-18T14:16:57.162Z"
+        },
+        {
+          "id": "bud_dairy",
+          "name": "Dairy & Perishables",
+          "amount": 15000,
+          "currency": "INR",
+          "period": "monthly",
+          "startDate": "2026-09-01",
+          "endDate": "2026-09-30",
+          "category": "Dairy & Frozen",
+          "alertThreshold": 85,
+          "notes": "Strict threshold for butter and milk supplies",
+          "createdAt": "2026-09-18T14:16:57.162Z"
+        }
+      ],
+      "suppliers": [
+        {
+          "id": "sup_apex",
+          "name": "Apex Wholesale Provisions",
+          "normalizedName": "apex wholesale provisions",
+          "phone": "+91 98200 12345",
+          "email": "orders@apexwholesale.in",
+          "address": "Plot 12, APMC Market Yard",
+          "notes": "Main staples and cooking oil distributor. Delivers on Tuesdays & Fridays.",
+          "createdAt": "2026-09-18T14:16:57.162Z"
+        },
+        {
+          "id": "sup_sunrise",
+          "name": "Sunrise Dairy & Agro",
+          "normalizedName": "sunrise dairy agro",
+          "phone": "+91 98450 67890",
+          "email": "supply@sunrisedairy.com",
+          "address": "Industrial Area Phase 2",
+          "notes": "Daily fresh dairy delivery before 7:00 AM.",
+          "createdAt": "2026-09-18T14:16:57.162Z"
+        }
+      ],
+      "chatHistory": []
+    }
+  },
+  {
+    "id": "usr_e6d8c122d54e9ee653cb7b63",
+    "email": "rajvardhan6174@gmail.com",
+    "passwordHash": "74f061b2dec8b93de0e20c28a5476bb65658c5ff9e69ce2ba1c46683fadd8b1fb4cf9fa623f7d200e917ad22c008bf700045d95ab9bbff3bb831cd4e0b7497d7",
+    "salt": "021b91a97bf1237cfd881a8bb7b9f5ec",
+    "fullName": "Raj Vardhan",
+    "createdAt": "2026-09-18T14:31:12.067Z",
+    "emailVerified": true,
+    "onboardingCompleted": true,
+    "businessProfile": {
+      "businessName": "My Business",
+      "businessType": "Wholesale Business",
+      "businessCategory": "General Merchandise",
+      "ownerName": "Raj Vardhan",
+      "businessEmail": "rajvardhan6174@gmail.com",
+      "phoneNumber": "",
+      "address": "",
+      "cityState": "",
+      "currency": "INR",
+      "reportingPeriod": "monthly",
+      "gstNumber": ""
+    },
+    "settings": {
+      "theme": "light",
+      "currency": "INR",
+      "reportingPeriod": "monthly",
+      "defaultCategory": "Inventory / Stock",
+      "alertPreferences": {
+        "budgetAlerts": true,
+        "priceChangeAlerts": true,
+        "lowStockAlerts": true,
+        "unusualSpendingAlerts": true,
+        "productNotifications": false
+      }
+    },
+    "data": {
+      "receipts": [],
+      "inventoryAdjustments": [],
+      "inventorySettings": {},
+      "budgets": [],
+      "suppliers": [],
+      "chatHistory": []
+    }
   }
 ]

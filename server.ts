@@ -1,9 +1,11 @@
+import 'dotenv/config';
 import express from 'express';
 import http from 'http';
+import fs from 'fs';
 import { WebSocketServer, WebSocket } from 'ws';
 import { GoogleGenAI } from '@google/genai';
 import path from 'path';
-import { authRouter, requireAuth, AuthenticatedRequest } from './server/auth';
+import { authRouter, requireAuth, optionalAuth, AuthenticatedRequest } from './server/auth';
 
 const app = express();
 const PORT = 3000;
@@ -21,12 +23,22 @@ app.use((req, res, next) => {
   }
 
   // If running in a serverless environment and URL was forwarded
-  const forwardedUri = req.headers['x-forwarded-uri'] as string;
-  if (forwardedUri && (req.url === '/' || req.url === '/api')) {
+  const forwardedUri = (req.headers['x-forwarded-uri'] || req.headers['x-matched-path'] || req.headers['x-original-url']) as string;
+  if (forwardedUri && typeof forwardedUri === 'string' && (req.url === '/' || req.url === '/api' || req.url === '/api/' || req.url.startsWith('/?'))) {
     req.url = forwardedUri;
   }
 
   next();
+});
+
+// Health check endpoint for deployment validation
+app.get(['/api/health', '/health'], (req, res) => {
+  res.json({
+    status: 'ok',
+    geminiConfigured: Boolean(process.env.GEMINI_API_KEY),
+    model: process.env.GEMINI_MODEL || 'gemini-3.1-flash-lite',
+    timestamp: new Date().toISOString()
+  });
 });
 
 // Mount Auth routes for both /api/auth and /auth
@@ -111,9 +123,9 @@ app.post(['/api/extract', '/extract'], async (req, res) => {
   }
 });
 
-app.post(['/api/chat', '/chat'], requireAuth, async (req: AuthenticatedRequest, res) => {
+app.post(['/api/chat', '/chat'], optionalAuth, async (req: AuthenticatedRequest, res) => {
   try {
-    const { messages, context, ledger } = req.body;
+    const { messages, context, ledger, businessName: bodyBizName, currency: bodyCurrency } = req.body;
 
     if (!Array.isArray(messages) || messages.length === 0) {
       return res.status(400).json({
@@ -125,14 +137,14 @@ app.post(['/api/chat', '/chat'], requireAuth, async (req: AuthenticatedRequest, 
     const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) {
       return res.status(503).json({
-        error: 'The AI service is temporarily unavailable. Please try again.',
+        error: 'Gemini AI API key is not configured. Please ensure GEMINI_API_KEY is configured in your environment or Settings.',
         code: 'API_KEY_MISSING'
       });
     }
 
-    const user = req.user!;
-    const businessName = user.businessProfile?.businessName || 'Your Business';
-    const currency = user.businessProfile?.currency || 'INR';
+    const user = req.user;
+    const businessName = user?.businessProfile?.businessName || bodyBizName || 'Your Business';
+    const currency = user?.businessProfile?.currency || bodyCurrency || 'INR';
 
     // Filter valid messages and slice to latest conversation turns to prevent token bloat
     const validMessages = messages
@@ -178,19 +190,38 @@ Current Question: ${userQuery}
 Please provide an accurate, grounded, helpful response based on the confirmed business data above.`;
 
     const ai = getGenAI();
-    const modelName = process.env.GEMINI_MODEL || 'gemini-3.1-flash-lite';
+    const primaryModel = process.env.GEMINI_MODEL || 'gemini-3.1-flash-lite';
+    let replyText = '';
 
-    const response = await ai.models.generateContent({
-      model: modelName,
-      contents: promptText,
-      config: {
-        systemInstruction,
-        temperature: 0.2,
-        topP: 0.95
+    try {
+      const response = await ai.models.generateContent({
+        model: primaryModel,
+        contents: promptText,
+        config: {
+          systemInstruction,
+          temperature: 0.2,
+          topP: 0.95
+        }
+      });
+      replyText = response.text ? response.text.trim() : '';
+    } catch (modelErr: any) {
+      console.warn(`Primary model "${primaryModel}" error, attempting fallback to gemini-3.1-flash-lite:`, modelErr?.message);
+      if (primaryModel !== 'gemini-3.1-flash-lite') {
+        const fallbackResponse = await ai.models.generateContent({
+          model: 'gemini-3.1-flash-lite',
+          contents: promptText,
+          config: {
+            systemInstruction,
+            temperature: 0.2,
+            topP: 0.95
+          }
+        });
+        replyText = fallbackResponse.text ? fallbackResponse.text.trim() : '';
+      } else {
+        throw modelErr;
       }
-    });
+    }
 
-    const replyText = response.text ? response.text.trim() : '';
     if (!replyText) {
       return res.status(200).json({
         reply: "I don't have enough information in your BizPulse data to answer that accurately.",
@@ -224,8 +255,15 @@ Please provide an accurate, grounded, helpful response based on the confirmed bu
       });
     }
 
+    if (msg.toLowerCase().includes('api_key') || msg.toLowerCase().includes('unauthenticated') || msg.toLowerCase().includes('api key')) {
+      return res.status(503).json({
+        error: 'Gemini AI API key is invalid or not configured. Please check Settings.',
+        code: 'API_KEY_MISSING'
+      });
+    }
+
     res.status(500).json({
-      error: 'The AI service is temporarily unavailable. Please try again.',
+      error: error?.message || 'The AI service is temporarily unavailable. Please try again.',
       code: 'API_ERROR'
     });
   }
@@ -271,6 +309,11 @@ async function startServer() {
     });
   });
 
+  // Catch unmatched API routes so they return JSON error instead of index.html
+  app.all('/api/*', (req, res) => {
+    res.status(404).json({ error: `API endpoint not found: ${req.method} ${req.path}`, code: 'NOT_FOUND' });
+  });
+
   if (!isProd) {
     const { createServer } = await import('vite');
     const vite = await createServer({
@@ -282,10 +325,18 @@ async function startServer() {
     });
     app.use(vite.middlewares);
   } else {
-    const distPath = path.resolve(process.cwd(), 'dist');
+    const cwdDist = path.resolve(process.cwd(), 'dist');
+    const localDist = path.resolve(__dirname, '..', 'dist');
+    const distPath = fs.existsSync(cwdDist) ? cwdDist : (fs.existsSync(localDist) ? localDist : __dirname);
+
     app.use(express.static(distPath));
     app.get('*', (req, res) => {
-      res.sendFile(path.resolve(distPath, 'index.html'));
+      const indexPath = path.resolve(distPath, 'index.html');
+      if (fs.existsSync(indexPath)) {
+        res.sendFile(indexPath);
+      } else {
+        res.status(404).send('Application assets not found. Please run npm run build.');
+      }
     });
   }
 

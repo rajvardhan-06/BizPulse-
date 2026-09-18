@@ -370,7 +370,9 @@ export default function Chat() {
                 ...messages.filter(m => m.id !== 'initial-msg').map(m => ({ role: m.role, content: m.content })),
                 { role: 'user', content: `[Scanned Receipt from ${newReceipt.merchant} for ${formatCurrency(newReceipt.total || 0)}. Items: ${newReceipt.items.map(i => `${i.name} (qty ${i.qty} @ ${formatCurrency(i.unit_price)})`).join(', ')}]. Question: ${messageText}` }
               ],
-              context: contextData
+              context: contextData,
+              businessName: user?.businessProfile?.businessName || 'Your Business',
+              currency: user?.businessProfile?.currency || 'INR'
             })
           });
 
@@ -425,7 +427,9 @@ export default function Chat() {
         },
         body: JSON.stringify({
           messages: [...messages.filter(m => m.id !== 'initial-msg'), userMessage].map(m => ({ role: m.role, content: m.content })),
-          context: relevantContext
+          context: relevantContext,
+          businessName: user?.businessProfile?.businessName || 'Your Business',
+          currency: user?.businessProfile?.currency || 'INR'
         })
       });
 
@@ -446,7 +450,7 @@ export default function Chat() {
         } else if (res.status === 429 || serverCode === 'RATE_LIMIT') {
           throw new Error('Too many requests. Please wait a moment and try again.');
         } else if (res.status === 503 || serverCode === 'API_KEY_MISSING') {
-          throw new Error('The AI service is temporarily unavailable. Please try again.');
+          throw new Error(serverError || 'The Gemini AI service is temporarily unavailable. Please verify your GEMINI_API_KEY in Settings.');
         } else if (res.status === 504 || serverCode === 'TIMEOUT') {
           throw new Error('The request timed out. Please try again.');
         } else {

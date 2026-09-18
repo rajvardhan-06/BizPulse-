@@ -80,6 +80,7 @@ export interface AuthenticatedRequest extends Request {
 const isVercel = Boolean(process.env.VERCEL || process.env.VERCEL_ENV || process.env.NOW_REGION);
 const DATA_DIR = isVercel ? path.join('/tmp', '.bizpulse_data') : path.resolve(process.cwd(), '.bizpulse_data');
 const USERS_FILE = path.join(DATA_DIR, 'users.json');
+const SESSIONS_FILE = path.join(DATA_DIR, 'sessions.json');
 const SEED_USERS_FILE = path.resolve(process.cwd(), '.bizpulse_data', 'users.json');
 
 const usersMap = new Map<string, UserRecord>();
@@ -125,6 +126,20 @@ function initStorage() {
       const list: UserRecord[] = JSON.parse(raw);
       list.forEach((u) => usersMap.set(u.id, u));
     }
+    if (fs.existsSync(SESSIONS_FILE)) {
+      try {
+        const rawSess = fs.readFileSync(SESSIONS_FILE, 'utf-8');
+        const sessList: SessionRecord[] = JSON.parse(rawSess);
+        const now = Date.now();
+        sessList.forEach((s) => {
+          if (s && s.token && s.expiresAt > now) {
+            sessionsMap.set(s.token, s);
+          }
+        });
+      } catch (err) {
+        console.error('Failed to read sessions file:', err);
+      }
+    }
   } catch (err) {
     console.error('Failed to load user storage:', err);
   }
@@ -137,6 +152,10 @@ function persistStorage() {
     }
     const list = Array.from(usersMap.values());
     fs.writeFileSync(USERS_FILE, JSON.stringify(list, null, 2), 'utf-8');
+
+    const now = Date.now();
+    const activeSessions = Array.from(sessionsMap.values()).filter((s) => s.expiresAt > now);
+    fs.writeFileSync(SESSIONS_FILE, JSON.stringify(activeSessions, null, 2), 'utf-8');
   } catch (err) {
     console.error('Failed to save user storage:', err);
   }
@@ -349,6 +368,7 @@ export function requireAuth(req: AuthenticatedRequest, res: Response, next: Next
         userAgent: req.headers['user-agent']
       };
       sessionsMap.set(token, session);
+      persistStorage();
     }
   }
 
@@ -358,17 +378,59 @@ export function requireAuth(req: AuthenticatedRequest, res: Response, next: Next
 
   if (Date.now() > session.expiresAt) {
     sessionsMap.delete(token);
+    persistStorage();
     return res.status(401).json({ error: 'Session expired. Please log in again.', code: 'SESSION_EXPIRED' });
   }
 
   const user = usersMap.get(session.userId);
   if (!user) {
     sessionsMap.delete(token);
+    persistStorage();
     return res.status(401).json({ error: 'User account not found.', code: 'USER_NOT_FOUND' });
   }
 
   req.user = user;
   req.sessionToken = token;
+  next();
+}
+
+// Optional authentication middleware: populates req.user if valid token provided, but does not reject request
+export function optionalAuth(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return next();
+  }
+
+  const token = authHeader.slice(7).trim();
+  let session = sessionsMap.get(token);
+
+  if (!session && token.startsWith('demo_token_')) {
+    let demoUser = Array.from(usersMap.values()).find((u) => u.email === 'demo@bizpulse.com');
+    if (!demoUser) {
+      seedDemoUserIfEmpty();
+      demoUser = Array.from(usersMap.values()).find((u) => u.email === 'demo@bizpulse.com');
+    }
+    if (demoUser) {
+      session = {
+        token,
+        userId: demoUser.id,
+        createdAt: Date.now(),
+        expiresAt: Date.now() + 7 * 24 * 60 * 60 * 1000,
+        userAgent: req.headers['user-agent']
+      };
+      sessionsMap.set(token, session);
+      persistStorage();
+    }
+  }
+
+  if (session && Date.now() <= session.expiresAt) {
+    const user = usersMap.get(session.userId);
+    if (user) {
+      req.user = user;
+      req.sessionToken = token;
+    }
+  }
+
   next();
 }
 
