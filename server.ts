@@ -10,6 +10,29 @@ import { authRouter, requireAuth, optionalAuth, AuthenticatedRequest } from './s
 const app = express();
 const PORT = 3000;
 
+// Sanitize GEMINI_MODEL in case it was accidentally populated with an API key
+if (
+  process.env.GEMINI_MODEL &&
+  (process.env.GEMINI_MODEL.startsWith('AIza') ||
+    (process.env.GEMINI_MODEL.length > 30 && !process.env.GEMINI_MODEL.includes('-')))
+) {
+  if (!process.env.GEMINI_API_KEY) {
+    process.env.GEMINI_API_KEY = process.env.GEMINI_MODEL;
+  }
+  process.env.GEMINI_MODEL = 'gemini-3.8-flash';
+}
+
+const DEFAULT_GEMINI_MODEL = 'gemini-3.8-flash';
+const FALLBACK_GEMINI_MODEL = 'gemini-3.1-flash-lite';
+
+function getValidGeminiModel(candidate?: string): string {
+  const model = (candidate || process.env.GEMINI_MODEL || '').trim();
+  if (!model || model.startsWith('AIza') || (model.length > 30 && !model.includes('-'))) {
+    return DEFAULT_GEMINI_MODEL;
+  }
+  return model;
+}
+
 // 1. CORS & Security headers
 app.use((req, res, next) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -104,12 +127,13 @@ app.use((req, res, next) => {
 
 // Health check endpoint for deployment validation and uptime checks
 app.get(['/api/health', '/health', '/api', '/api/'], (req, res) => {
+  const hasValidKey = Boolean(process.env.GEMINI_API_KEY || (process.env.GEMINI_MODEL && process.env.GEMINI_MODEL.startsWith('AIza')));
   res.json({
     status: 'ok',
     environment: process.env.NODE_ENV || 'development',
     isVercel: Boolean(process.env.VERCEL || process.env.VERCEL_ENV || process.env.NOW_REGION),
-    geminiConfigured: Boolean(process.env.GEMINI_API_KEY),
-    model: process.env.GEMINI_MODEL || 'gemini-3.1-flash-lite',
+    geminiConfigured: hasValidKey,
+    model: getValidGeminiModel(),
     timestamp: new Date().toISOString()
   });
 });
@@ -121,7 +145,10 @@ app.use('/api', authRouter);
 
 // Init Gemini lazily / securely
 function getGenAI() {
-  const apiKey = process.env.GEMINI_API_KEY;
+  let apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey && process.env.GEMINI_MODEL && process.env.GEMINI_MODEL.startsWith('AIza')) {
+    apiKey = process.env.GEMINI_MODEL;
+  }
   if (!apiKey) {
     throw new Error('GEMINI_API_KEY is not configured');
   }
@@ -143,8 +170,8 @@ app.post(['/api/extract', '/extract'], async (req, res) => {
       return res.status(400).json({ error: 'No image provided for receipt scan', code: 'NO_IMAGE' });
     }
 
-    const apiKey = process.env.GEMINI_API_KEY;
-    if (!apiKey) {
+    const hasApiKey = Boolean(process.env.GEMINI_API_KEY || (process.env.GEMINI_MODEL && process.env.GEMINI_MODEL.startsWith('AIza')));
+    if (!hasApiKey) {
       return res.status(503).json({
         error: 'Receipt OCR scanning is temporarily unavailable. Please verify API key configuration in Settings.',
         code: 'API_KEY_MISSING'
@@ -152,9 +179,10 @@ app.post(['/api/extract', '/extract'], async (req, res) => {
     }
 
     const ai = getGenAI();
-    const modelName = process.env.GEMINI_MODEL || 'gemini-3.1-flash-lite';
-    const response = await ai.models.generateContent({
-      model: modelName,
+    const primaryModel = getValidGeminiModel();
+    const fallbackModel = primaryModel === DEFAULT_GEMINI_MODEL ? FALLBACK_GEMINI_MODEL : DEFAULT_GEMINI_MODEL;
+
+    const extractPayload = {
       contents: [
         {
           role: 'user',
@@ -178,7 +206,21 @@ app.post(['/api/extract', '/extract'], async (req, res) => {
       config: {
         responseMimeType: 'application/json',
       }
-    });
+    };
+
+    let response: any;
+    try {
+      response = await ai.models.generateContent({
+        model: primaryModel,
+        ...extractPayload
+      });
+    } catch (primaryErr: any) {
+      console.warn(`Extraction with ${primaryModel} failed, trying fallback ${fallbackModel}:`, primaryErr?.message || primaryErr);
+      response = await ai.models.generateContent({
+        model: fallbackModel,
+        ...extractPayload
+      });
+    }
 
     const text = response.text;
     if (!text) throw new Error('No response from Gemini');
@@ -208,8 +250,8 @@ app.post(['/api/chat', '/chat'], optionalAuth, async (req: AuthenticatedRequest,
       });
     }
 
-    const apiKey = process.env.GEMINI_API_KEY;
-    if (!apiKey) {
+    const hasApiKey = Boolean(process.env.GEMINI_API_KEY || (process.env.GEMINI_MODEL && process.env.GEMINI_MODEL.startsWith('AIza')));
+    if (!hasApiKey) {
       return res.status(503).json({
         error: 'Gemini AI API key is not configured. Please ensure GEMINI_API_KEY is configured in your environment or Settings.',
         code: 'API_KEY_MISSING'
@@ -264,36 +306,32 @@ Current Question: ${userQuery}
 Please provide an accurate, grounded, helpful response based on the confirmed business data above.`;
 
     const ai = getGenAI();
-    const primaryModel = process.env.GEMINI_MODEL || 'gemini-3.1-flash-lite';
+    const primaryModel = getValidGeminiModel();
+    const fallbackModel = primaryModel === DEFAULT_GEMINI_MODEL ? FALLBACK_GEMINI_MODEL : DEFAULT_GEMINI_MODEL;
     let replyText = '';
+
+    const chatPayload = {
+      contents: promptText,
+      config: {
+        systemInstruction,
+        temperature: 0.2,
+        topP: 0.95
+      }
+    };
 
     try {
       const response = await ai.models.generateContent({
         model: primaryModel,
-        contents: promptText,
-        config: {
-          systemInstruction,
-          temperature: 0.2,
-          topP: 0.95
-        }
+        ...chatPayload
       });
       replyText = response.text ? response.text.trim() : '';
     } catch (modelErr: any) {
-      console.warn(`Primary model "${primaryModel}" error, attempting fallback to gemini-3.1-flash-lite:`, modelErr?.message);
-      if (primaryModel !== 'gemini-3.1-flash-lite') {
-        const fallbackResponse = await ai.models.generateContent({
-          model: 'gemini-3.1-flash-lite',
-          contents: promptText,
-          config: {
-            systemInstruction,
-            temperature: 0.2,
-            topP: 0.95
-          }
-        });
-        replyText = fallbackResponse.text ? fallbackResponse.text.trim() : '';
-      } else {
-        throw modelErr;
-      }
+      console.warn(`Primary chat model "${primaryModel}" failed, falling back to ${fallbackModel}:`, modelErr?.message || modelErr);
+      const fallbackResponse = await ai.models.generateContent({
+        model: fallbackModel,
+        ...chatPayload
+      });
+      replyText = fallbackResponse.text ? fallbackResponse.text.trim() : '';
     }
 
     if (!replyText) {

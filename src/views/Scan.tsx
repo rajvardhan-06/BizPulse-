@@ -101,7 +101,12 @@ export default function Scan() {
       clearTimeout(timeoutId);
       
       if (!res.ok) {
-        throw new Error('Receipt analysis service is temporarily unavailable.');
+        let errDetail = 'Receipt analysis service is temporarily unavailable.';
+        try {
+          const errJson = await res.json();
+          if (errJson.error) errDetail = errJson.error;
+        } catch {}
+        throw new Error(errDetail);
       }
       
       const data = await res.json();
