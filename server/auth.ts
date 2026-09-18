@@ -77,8 +77,10 @@ export interface AuthenticatedRequest extends Request {
 }
 
 // In-memory store with file fallback
-const DATA_DIR = path.resolve(process.cwd(), '.bizpulse_data');
+const isVercel = Boolean(process.env.VERCEL || process.env.VERCEL_ENV || process.env.NOW_REGION);
+const DATA_DIR = isVercel ? path.join('/tmp', '.bizpulse_data') : path.resolve(process.cwd(), '.bizpulse_data');
 const USERS_FILE = path.join(DATA_DIR, 'users.json');
+const SEED_USERS_FILE = path.resolve(process.cwd(), '.bizpulse_data', 'users.json');
 
 const usersMap = new Map<string, UserRecord>();
 const sessionsMap = new Map<string, SessionRecord>();
@@ -103,6 +105,18 @@ function checkRateLimit(key: string, maxAttempts: number = 8, windowMs: number =
 
 function initStorage() {
   try {
+    // 1. Read seed users if available in project bundle
+    if (fs.existsSync(SEED_USERS_FILE)) {
+      try {
+        const rawSeed = fs.readFileSync(SEED_USERS_FILE, 'utf-8');
+        const list: UserRecord[] = JSON.parse(rawSeed);
+        list.forEach((u) => usersMap.set(u.id, u));
+      } catch (err) {
+        console.error('Failed to read seed users file:', err);
+      }
+    }
+
+    // 2. Read persistent/tmp storage file if available
     if (!fs.existsSync(DATA_DIR)) {
       fs.mkdirSync(DATA_DIR, { recursive: true });
     }

@@ -10,8 +10,28 @@ const PORT = 3000;
 
 app.use(express.json({ limit: '50mb' }));
 
-// Mount Auth routes
+// CORS & Serverless URL Normalization
+app.use((req, res, next) => {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS, PATCH');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
+
+  if (req.method === 'OPTIONS') {
+    return res.status(200).end();
+  }
+
+  // If running in a serverless environment and URL was forwarded
+  const forwardedUri = req.headers['x-forwarded-uri'] as string;
+  if (forwardedUri && (req.url === '/' || req.url === '/api')) {
+    req.url = forwardedUri;
+  }
+
+  next();
+});
+
+// Mount Auth routes for both /api/auth and /auth
 app.use('/api/auth', authRouter);
+app.use('/auth', authRouter);
 
 // Init Gemini lazily / securely
 function getGenAI() {
@@ -22,7 +42,7 @@ function getGenAI() {
   return new GoogleGenAI({ apiKey });
 }
 
-app.post('/api/extract', async (req, res) => {
+app.post(['/api/extract', '/extract'], async (req, res) => {
   try {
     const { imageBase64, mimeType } = req.body;
     
@@ -75,7 +95,7 @@ app.post('/api/extract', async (req, res) => {
   }
 });
 
-app.post('/api/chat', requireAuth, async (req: AuthenticatedRequest, res) => {
+app.post(['/api/chat', '/chat'], requireAuth, async (req: AuthenticatedRequest, res) => {
   try {
     const { messages, ledger } = req.body;
     const user = req.user!;
@@ -186,7 +206,9 @@ async function startServer() {
   });
 }
 
-if (process.env.NODE_ENV !== 'production' || process.env.RENDER || process.env.CLOUD_RUN || !process.env.VERCEL) {
+const isVercel = Boolean(process.env.VERCEL || process.env.VERCEL_ENV || process.env.NOW_REGION);
+
+if (!isVercel) {
   startServer();
 }
 
