@@ -17,7 +17,9 @@ import {
   IndianRupee,
   DollarSign,
   Euro,
-  Coins
+  Coins,
+  Loader2,
+  AlertCircle
 } from 'lucide-react';
 import { useAuthStore } from '../../authStore';
 
@@ -49,23 +51,57 @@ export default function Onboarding() {
   const navigate = useNavigate();
   const { user, completeOnboarding } = useAuthStore();
 
-  const [step, setStep] = useState(1);
+  const [step, setStepState] = useState<number>(() => {
+    try {
+      const saved = sessionStorage.getItem('bizpulse_onboarding_step');
+      const parsed = saved ? parseInt(saved, 10) : 1;
+      return parsed >= 1 && parsed <= 5 ? parsed : 1;
+    } catch {
+      return 1;
+    }
+  });
+
+  const setStep = (newStep: number) => {
+    setStepState(newStep);
+    try {
+      sessionStorage.setItem('bizpulse_onboarding_step', String(newStep));
+    } catch {}
+  };
+
   const [businessType, setBusinessType] = useState(user?.businessProfile?.businessType || 'Retail Shop');
   const [businessName, setBusinessName] = useState(user?.businessProfile?.businessName || '');
   const [currency, setCurrency] = useState(user?.businessProfile?.currency || 'INR');
   const [reportingPeriod, setReportingPeriod] = useState(user?.businessProfile?.reportingPeriod || 'monthly');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   const handleFinish = async (targetRoute: string = '/') => {
+    if (isSubmitting) return;
     setIsSubmitting(true);
-    await completeOnboarding({
-      businessName: businessName.trim() || 'My Business',
-      businessType,
-      currency,
-      reportingPeriod
-    });
-    setIsSubmitting(false);
-    navigate(targetRoute, { replace: true });
+    setErrorMsg(null);
+
+    try {
+      const res = await completeOnboarding({
+        businessName: businessName.trim() || 'My Business',
+        businessType,
+        currency,
+        reportingPeriod
+      });
+
+      if (res.success) {
+        try {
+          sessionStorage.removeItem('bizpulse_onboarding_step');
+        } catch {}
+        navigate(targetRoute, { replace: true });
+      } else {
+        setErrorMsg(res.error || 'Failed to save setup preferences. Please try again.');
+        setIsSubmitting(false);
+      }
+    } catch (err: any) {
+      console.error('Error completing onboarding:', err);
+      setErrorMsg('An unexpected error occurred. Please try again.');
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -342,12 +378,29 @@ export default function Onboarding() {
                 </p>
               </div>
 
+              {isSubmitting && (
+                <div className="p-4 rounded-2xl bg-[#028090]/10 border border-[#028090]/20 flex items-center justify-center space-x-3 text-[#028090] dark:text-[#02C39A]">
+                  <Loader2 className="w-5 h-5 animate-spin flex-shrink-0" />
+                  <span className="text-sm font-semibold">Configuring your business ledger and insights...</span>
+                </div>
+              )}
+
+              {errorMsg && (
+                <div className="p-4 rounded-2xl bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800/60 flex items-start space-x-3 text-red-700 dark:text-red-300 text-left">
+                  <AlertCircle className="w-5 h-5 flex-shrink-0 mt-0.5" />
+                  <div className="flex-1 text-xs sm:text-sm">
+                    <p className="font-semibold">{errorMsg}</p>
+                    <p className="mt-1 text-xs opacity-90">Please click an option below to retry.</p>
+                  </div>
+                </div>
+              )}
+
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2">
                 <button
                   type="button"
                   disabled={isSubmitting}
                   onClick={() => handleFinish('/scan')}
-                  className="flex flex-col items-center p-5 rounded-2xl border border-teal-100 dark:border-gray-800 hover:border-[#028090] hover:bg-teal-50/40 dark:hover:bg-gray-800/60 transition-all text-center group"
+                  className="flex flex-col items-center p-5 rounded-2xl border border-teal-100 dark:border-gray-800 hover:border-[#028090] hover:bg-teal-50/40 dark:hover:bg-gray-800/60 transition-all text-center group disabled:opacity-60 disabled:pointer-events-none"
                 >
                   <div className="w-12 h-12 rounded-2xl bg-[#028090]/10 dark:bg-[#028090]/20 text-[#028090] dark:text-[#02C39A] flex items-center justify-center mb-3 group-hover:scale-105 transition-transform">
                     <Camera className="w-6 h-6" />
@@ -360,7 +413,7 @@ export default function Onboarding() {
                   type="button"
                   disabled={isSubmitting}
                   onClick={() => handleFinish('/scan')}
-                  className="flex flex-col items-center p-5 rounded-2xl border border-teal-100 dark:border-gray-800 hover:border-[#028090] hover:bg-teal-50/40 dark:hover:bg-gray-800/60 transition-all text-center group"
+                  className="flex flex-col items-center p-5 rounded-2xl border border-teal-100 dark:border-gray-800 hover:border-[#028090] hover:bg-teal-50/40 dark:hover:bg-gray-800/60 transition-all text-center group disabled:opacity-60 disabled:pointer-events-none"
                 >
                   <div className="w-12 h-12 rounded-2xl bg-[#00A896]/10 dark:bg-[#00A896]/20 text-[#00A896] dark:text-[#02C39A] flex items-center justify-center mb-3 group-hover:scale-105 transition-transform">
                     <Upload className="w-6 h-6" />
@@ -373,13 +426,24 @@ export default function Onboarding() {
                   type="button"
                   disabled={isSubmitting}
                   onClick={() => handleFinish('/')}
-                  className="flex flex-col items-center p-5 rounded-2xl border border-teal-100 dark:border-gray-800 hover:border-[#028090] hover:bg-teal-50/40 dark:hover:bg-gray-800/60 transition-all text-center group"
+                  className="flex flex-col items-center p-5 rounded-2xl border border-teal-100 dark:border-gray-800 hover:border-[#028090] hover:bg-teal-50/40 dark:hover:bg-gray-800/60 transition-all text-center group disabled:opacity-60 disabled:pointer-events-none"
                 >
                   <div className="w-12 h-12 rounded-2xl bg-teal-50 dark:bg-gray-800 text-[#0B2E33] dark:text-gray-200 flex items-center justify-center mb-3 group-hover:scale-105 transition-transform">
                     <LayoutDashboard className="w-6 h-6" />
                   </div>
                   <span className="font-bold text-sm text-[#0B2E33] dark:text-gray-100 mb-1">Explore Dashboard</span>
                   <span className="text-xs text-[#5C7A7D] dark:text-gray-400">Review empty workspace & metrics</span>
+                </button>
+              </div>
+
+              <div className="pt-2 flex justify-start border-t border-gray-100 dark:border-gray-800">
+                <button
+                  type="button"
+                  disabled={isSubmitting}
+                  onClick={() => setStep(4)}
+                  className="text-xs font-semibold text-gray-500 hover:text-gray-700 dark:text-gray-400 disabled:opacity-50"
+                >
+                  ← Back to edit settings
                 </button>
               </div>
 

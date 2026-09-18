@@ -47,6 +47,11 @@ export default function ProtectedRoute({ children }: ProtectedRouteProps) {
     return <Navigate to="/onboarding" replace />;
   }
 
+  // Redirect to dashboard if onboarding is already completed and user tries to access /onboarding
+  if (user && user.onboardingCompleted && location.pathname === '/onboarding') {
+    return <Navigate to="/" replace />;
+  }
+
   return children ? <>{children}</> : <Outlet />;
 }
 

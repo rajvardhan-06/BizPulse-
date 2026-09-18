@@ -336,10 +336,111 @@ export function generateSecureToken(): string {
   return crypto.randomBytes(32).toString('hex');
 }
 
+const SESSION_SECRET = process.env.SESSION_SECRET || process.env.JWT_SECRET || 'bizpulse_serverless_session_secret_key_2026';
+
+export interface TokenClaims {
+  userId: string;
+  email: string;
+  fullName: string;
+  phoneNumber?: string;
+  onboardingCompleted: boolean;
+  businessName?: string;
+  businessType?: string;
+  currency?: string;
+  reportingPeriod?: 'weekly' | 'monthly' | 'quarterly' | 'annual';
+  createdAt: number;
+  expiresAt: number;
+}
+
+export function createSignedSessionToken(claims: TokenClaims): string {
+  const payloadJson = JSON.stringify(claims);
+  const payloadB64 = Buffer.from(payloadJson, 'utf-8').toString('base64url');
+  const hmac = crypto.createHmac('sha256', SESSION_SECRET).update(payloadB64).digest('hex');
+  return `bpt_v2_${payloadB64}.${hmac}`;
+}
+
+export function verifySignedSessionToken(token: string): TokenClaims | null {
+  if (!token || typeof token !== 'string' || !token.startsWith('bpt_v2_')) return null;
+  const dotIndex = token.indexOf('.');
+  if (dotIndex === -1) return null;
+
+  const prefixAndPayload = token.slice(0, dotIndex);
+  const signature = token.slice(dotIndex + 1);
+  const payloadB64 = prefixAndPayload.slice(7); // remove 'bpt_v2_'
+
+  try {
+    const expectedHmac = crypto.createHmac('sha256', SESSION_SECRET).update(payloadB64).digest('hex');
+    if (signature.length !== expectedHmac.length) return null;
+
+    const sigBuf = Buffer.from(signature, 'hex');
+    const expectedBuf = Buffer.from(expectedHmac, 'hex');
+    if (!crypto.timingSafeEqual(sigBuf, expectedBuf)) {
+      return null;
+    }
+
+    const claimsJson = Buffer.from(payloadB64, 'base64url').toString('utf-8');
+    const claims: TokenClaims = JSON.parse(claimsJson);
+    if (Date.now() > claims.expiresAt) {
+      return null;
+    }
+    return claims;
+  } catch {
+    return null;
+  }
+}
+
 // Strip sensitive fields before sending user object to client
 export function sanitizeUser(user: UserRecord) {
   const { passwordHash, salt, ...safeUser } = user;
   return safeUser;
+}
+
+function instantiateUserFromClaims(claims: TokenClaims): UserRecord {
+  return {
+    id: claims.userId,
+    email: claims.email,
+    passwordHash: '',
+    salt: '',
+    fullName: claims.fullName,
+    phoneNumber: claims.phoneNumber,
+    createdAt: new Date(claims.createdAt).toISOString(),
+    emailVerified: true,
+    onboardingCompleted: Boolean(claims.onboardingCompleted),
+    businessProfile: {
+      businessName: claims.businessName || 'My Business',
+      businessType: claims.businessType || 'Retail Shop',
+      businessCategory: 'General Merchandise',
+      ownerName: claims.fullName,
+      businessEmail: claims.email,
+      phoneNumber: claims.phoneNumber || '',
+      address: '',
+      cityState: '',
+      currency: claims.currency || 'INR',
+      reportingPeriod: claims.reportingPeriod || 'monthly',
+      gstNumber: ''
+    },
+    settings: {
+      theme: 'light',
+      currency: claims.currency || 'INR',
+      reportingPeriod: claims.reportingPeriod || 'monthly',
+      defaultCategory: 'Inventory / Stock',
+      alertPreferences: {
+        budgetAlerts: true,
+        priceChangeAlerts: true,
+        lowStockAlerts: true,
+        unusualSpendingAlerts: true,
+        productNotifications: false
+      }
+    },
+    data: {
+      receipts: [],
+      inventoryAdjustments: [],
+      inventorySettings: {},
+      budgets: [],
+      suppliers: [],
+      chatHistory: []
+    }
+  };
 }
 
 // Authentication middleware
@@ -350,9 +451,27 @@ export function requireAuth(req: AuthenticatedRequest, res: Response, next: Next
   }
 
   const token = authHeader.slice(7).trim();
+
+  // 1. Stateless cryptographically signed token verification (cross-lambda / serverless resilient)
+  const claims = verifySignedSessionToken(token);
+  if (claims) {
+    let user = usersMap.get(claims.userId);
+    if (!user) {
+      user = instantiateUserFromClaims(claims);
+      usersMap.set(claims.userId, user);
+    } else {
+      if (claims.onboardingCompleted && !user.onboardingCompleted) {
+        user.onboardingCompleted = true;
+      }
+    }
+    req.user = user;
+    req.sessionToken = token;
+    return next();
+  }
+
   let session = sessionsMap.get(token);
 
-  // If token is a valid demo token, auto-bind to demo user if session was lost (e.g. server restart)
+  // 2. If token is a valid demo token, auto-bind to demo user if session was lost (e.g. server restart)
   if (!session && token.startsWith('demo_token_')) {
     let demoUser = Array.from(usersMap.values()).find((u) => u.email === 'demo@bizpulse.com');
     if (!demoUser) {
@@ -402,6 +521,19 @@ export function optionalAuth(req: AuthenticatedRequest, res: Response, next: Nex
   }
 
   const token = authHeader.slice(7).trim();
+
+  const claims = verifySignedSessionToken(token);
+  if (claims) {
+    let user = usersMap.get(claims.userId);
+    if (!user) {
+      user = instantiateUserFromClaims(claims);
+      usersMap.set(claims.userId, user);
+    }
+    req.user = user;
+    req.sessionToken = token;
+    return next();
+  }
+
   let session = sessionsMap.get(token);
 
   if (!session && token.startsWith('demo_token_')) {
@@ -537,9 +669,21 @@ authRouter.post('/signup', (req: Request, res: Response) => {
     usersMap.set(userId, newUser);
     persistStorage();
 
-    // Create session token (valid 7 days)
-    const token = generateSecureToken();
+    // Create session token (valid 7 days, cryptographically signed for serverless resilience)
     const expiresAt = Date.now() + 7 * 24 * 60 * 60 * 1000;
+    const token = createSignedSessionToken({
+      userId,
+      email: normalizedEmail,
+      fullName: fullName.trim(),
+      phoneNumber: phoneNumber ? String(phoneNumber).trim() : undefined,
+      onboardingCompleted: false,
+      businessName: (businessName || '').trim() || 'My Business',
+      businessType: 'Retail Shop',
+      currency: 'INR',
+      reportingPeriod: 'monthly',
+      createdAt: Date.now(),
+      expiresAt
+    });
     sessionsMap.set(token, {
       token,
       userId,
@@ -595,9 +739,21 @@ authRouter.post('/login', (req: Request, res: Response) => {
     // Reset rate limiter on successful login
     rateLimitMap.delete(rateLimitKey);
 
-    // Create session token (valid 7 days)
-    const token = generateSecureToken();
+    // Create session token (valid 7 days, cryptographically signed for serverless resilience)
     const expiresAt = Date.now() + 7 * 24 * 60 * 60 * 1000;
+    const token = createSignedSessionToken({
+      userId: user.id,
+      email: user.email,
+      fullName: user.fullName,
+      phoneNumber: user.phoneNumber,
+      onboardingCompleted: Boolean(user.onboardingCompleted),
+      businessName: user.businessProfile?.businessName || 'My Business',
+      businessType: user.businessProfile?.businessType || 'Retail Shop',
+      currency: user.businessProfile?.currency || 'INR',
+      reportingPeriod: user.businessProfile?.reportingPeriod || 'monthly',
+      createdAt: Date.now(),
+      expiresAt
+    });
     sessionsMap.set(token, {
       token,
       userId: user.id,
@@ -630,8 +786,20 @@ authRouter.post('/demo-login', (req: Request, res: Response) => {
       return res.status(500).json({ error: 'Demo merchant profile is not available.' });
     }
 
-    const token = generateSecureToken();
     const expiresAt = Date.now() + 7 * 24 * 60 * 60 * 1000;
+    const token = createSignedSessionToken({
+      userId: demoUser.id,
+      email: demoUser.email,
+      fullName: demoUser.fullName,
+      phoneNumber: demoUser.phoneNumber,
+      onboardingCompleted: true,
+      businessName: demoUser.businessProfile.businessName,
+      businessType: demoUser.businessProfile.businessType,
+      currency: demoUser.businessProfile.currency,
+      reportingPeriod: demoUser.businessProfile.reportingPeriod,
+      createdAt: Date.now(),
+      expiresAt
+    });
     sessionsMap.set(token, {
       token,
       userId: demoUser.id,
@@ -875,16 +1043,47 @@ authRouter.post('/change-password', requireAuth, (req: AuthenticatedRequest, res
 });
 
 // 11. COMPLETE ONBOARDING
-authRouter.post('/onboarding/complete', requireAuth, (req: AuthenticatedRequest, res: Response) => {
+authRouter.post(['/onboarding/complete', '/auth/onboarding/complete', '/api/auth/onboarding/complete'], requireAuth, (req: AuthenticatedRequest, res: Response) => {
   try {
     const user = req.user!;
     const { businessName, businessType, currency, reportingPeriod } = req.body;
 
-    if (businessName) user.businessProfile.businessName = businessName;
-    if (businessType) user.businessProfile.businessType = businessType;
+    if (!user.businessProfile) {
+      user.businessProfile = {
+        businessName: 'My Business',
+        businessType: 'Retail Shop',
+        businessCategory: 'General Merchandise',
+        ownerName: user.fullName,
+        businessEmail: user.email,
+        phoneNumber: user.phoneNumber || '',
+        address: '',
+        cityState: '',
+        currency: 'INR',
+        reportingPeriod: 'monthly',
+        gstNumber: ''
+      };
+    }
+    if (!user.settings) {
+      user.settings = {
+        theme: 'light',
+        currency: 'INR',
+        reportingPeriod: 'monthly',
+        defaultCategory: 'Inventory / Stock',
+        alertPreferences: {
+          budgetAlerts: true,
+          priceChangeAlerts: true,
+          lowStockAlerts: true,
+          unusualSpendingAlerts: true,
+          productNotifications: false
+        }
+      };
+    }
+
+    if (businessName) user.businessProfile.businessName = String(businessName).trim();
+    if (businessType) user.businessProfile.businessType = String(businessType).trim();
     if (currency) {
-      user.businessProfile.currency = currency;
-      user.settings.currency = currency;
+      user.businessProfile.currency = String(currency).trim();
+      user.settings.currency = String(currency).trim();
     }
     if (reportingPeriod) {
       user.businessProfile.reportingPeriod = reportingPeriod;
@@ -892,13 +1091,39 @@ authRouter.post('/onboarding/complete', requireAuth, (req: AuthenticatedRequest,
     }
 
     user.onboardingCompleted = true;
+    usersMap.set(user.id, user);
     persistStorage();
+
+    const expiresAt = Date.now() + 7 * 24 * 60 * 60 * 1000;
+    const updatedToken = createSignedSessionToken({
+      userId: user.id,
+      email: user.email,
+      fullName: user.fullName,
+      phoneNumber: user.phoneNumber,
+      onboardingCompleted: true,
+      businessName: user.businessProfile.businessName,
+      businessType: user.businessProfile.businessType,
+      currency: user.businessProfile.currency,
+      reportingPeriod: user.businessProfile.reportingPeriod,
+      createdAt: Date.now(),
+      expiresAt
+    });
+
+    sessionsMap.set(updatedToken, {
+      token: updatedToken,
+      userId: user.id,
+      createdAt: Date.now(),
+      expiresAt,
+      userAgent: req.headers['user-agent']
+    });
 
     res.json({
       message: 'Onboarding completed.',
-      user: sanitizeUser(user)
+      user: sanitizeUser(user),
+      token: updatedToken
     });
   } catch (err: any) {
+    console.error('Onboarding complete error:', err);
     res.status(500).json({ error: 'Failed to complete onboarding.' });
   }
 });

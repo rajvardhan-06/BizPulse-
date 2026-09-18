@@ -424,5 +424,137 @@
       "suppliers": [],
       "chatHistory": []
     }
+  },
+  {
+    "id": "usr_d5435f5f007c3474abe73bea",
+    "email": "rajvardhan035679@gmail.com",
+    "passwordHash": "84ba1810439611ef32aab723cd0eff5dbfebb2fe164f1d3151713dca366ac4c04409f77dc6ce9e1e4e63fe4c7e570f7c4b9a06512cca27d4c9ec2cb5e25352b9",
+    "salt": "dcd08dadfb1d32c089406f407b71157b",
+    "fullName": "Raj Vardhan",
+    "createdAt": "2026-09-18T15:43:15.417Z",
+    "emailVerified": true,
+    "onboardingCompleted": true,
+    "businessProfile": {
+      "businessName": "My Business",
+      "businessType": "Retail Shop",
+      "businessCategory": "General Merchandise",
+      "ownerName": "Raj Vardhan",
+      "businessEmail": "rajvardhan035679@gmail.com",
+      "phoneNumber": "",
+      "address": "",
+      "cityState": "",
+      "currency": "INR",
+      "reportingPeriod": "monthly",
+      "gstNumber": ""
+    },
+    "settings": {
+      "theme": "light",
+      "currency": "INR",
+      "reportingPeriod": "monthly",
+      "defaultCategory": "Inventory / Stock",
+      "alertPreferences": {
+        "budgetAlerts": true,
+        "priceChangeAlerts": true,
+        "lowStockAlerts": true,
+        "unusualSpendingAlerts": true,
+        "productNotifications": false
+      }
+    },
+    "data": {
+      "receipts": [],
+      "inventoryAdjustments": [],
+      "inventorySettings": {},
+      "budgets": [],
+      "suppliers": [],
+      "chatHistory": []
+    }
+  },
+  {
+    "id": "usr_df58bda972cb55866b6d7ad0",
+    "email": "priya_1789746957741@example.com",
+    "passwordHash": "c97a1336ba16e5d17a21843844e61c7cb7690439ef76562270b20c3a2197862834d2c31ffa4b33acd84a1532267384f385369cbe0fe96fca10ae3486ab20b52d",
+    "salt": "20d3ee73a2f2bf0c85283c352c57035c",
+    "fullName": "Priya Sharma",
+    "createdAt": "2026-09-18T15:55:57.807Z",
+    "emailVerified": true,
+    "onboardingCompleted": true,
+    "businessProfile": {
+      "businessName": "Sharma Provisions Retail",
+      "businessType": "Grocery Store",
+      "businessCategory": "General Merchandise",
+      "ownerName": "Priya Sharma",
+      "businessEmail": "priya_1789746957741@example.com",
+      "phoneNumber": "",
+      "address": "",
+      "cityState": "",
+      "currency": "INR",
+      "reportingPeriod": "monthly",
+      "gstNumber": ""
+    },
+    "settings": {
+      "theme": "light",
+      "currency": "INR",
+      "reportingPeriod": "monthly",
+      "defaultCategory": "Inventory / Stock",
+      "alertPreferences": {
+        "budgetAlerts": true,
+        "priceChangeAlerts": true,
+        "lowStockAlerts": true,
+        "unusualSpendingAlerts": true,
+        "productNotifications": false
+      }
+    },
+    "data": {
+      "receipts": [],
+      "inventoryAdjustments": [],
+      "inventorySettings": {},
+      "budgets": [],
+      "suppliers": [],
+      "chatHistory": []
+    }
+  },
+  {
+    "id": "usr_03ee3226dcf85600748d7979",
+    "email": "priya_1789746982891@example.com",
+    "passwordHash": "131a665ecaecee86e83c0037539eb05290b65db37b6eeffa1f823cf4a5a9e1083d232f5b8495aafa2f03a79965502efc3020e8c5687349b86e66781b47603004",
+    "salt": "6ebb88aea4e0bbf3ee885f2bd81e2bdb",
+    "fullName": "Priya Sharma",
+    "createdAt": "2026-09-18T15:56:22.972Z",
+    "emailVerified": true,
+    "onboardingCompleted": true,
+    "businessProfile": {
+      "businessName": "Sharma Provisions Retail",
+      "businessType": "Grocery Store",
+      "businessCategory": "General Merchandise",
+      "ownerName": "Priya Sharma",
+      "businessEmail": "priya_1789746982891@example.com",
+      "phoneNumber": "",
+      "address": "",
+      "cityState": "",
+      "currency": "INR",
+      "reportingPeriod": "monthly",
+      "gstNumber": ""
+    },
+    "settings": {
+      "theme": "light",
+      "currency": "INR",
+      "reportingPeriod": "monthly",
+      "defaultCategory": "Inventory / Stock",
+      "alertPreferences": {
+        "budgetAlerts": true,
+        "priceChangeAlerts": true,
+        "lowStockAlerts": true,
+        "unusualSpendingAlerts": true,
+        "productNotifications": false
+      }
+    },
+    "data": {
+      "receipts": [],
+      "inventoryAdjustments": [],
+      "inventorySettings": {},
+      "budgets": [],
+      "suppliers": [],
+      "chatHistory": []
+    }
   }
 ]

@@ -51,7 +51,13 @@ app.use((req, res, next) => {
 
   if (targetPath) {
     targetPath = targetPath.replace(/^\/+/, '');
-    req.url = `/api/${targetPath}`;
+    if (targetPath.startsWith('api/')) {
+      targetPath = targetPath.slice(4);
+    }
+    const queryIndex = targetPath.indexOf('?');
+    const pathOnly = queryIndex >= 0 ? targetPath.slice(0, queryIndex) : targetPath;
+    const queryPart = queryIndex >= 0 ? targetPath.slice(queryIndex) : '';
+    req.url = `/api/${pathOnly}${queryPart}`;
   }
 
   next();
