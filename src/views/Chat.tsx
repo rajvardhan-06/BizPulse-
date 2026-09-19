@@ -528,16 +528,23 @@ export default function Chat() {
           // Non-readable body
         }
 
-        if (res.status === 401 || serverCode === 'AUTH_REQUIRED' || serverCode === 'SESSION_EXPIRED') {
+        if (serverCode === 'API_KEY_MISSING' || serverCode === 'API_KEY_INVALID') {
+          setIsApiKeyMissing(true);
+          setIsAuthError(false);
+          throw new Error(serverError || 'Gemini AI API key is not configured. Please ensure GEMINI_API_KEY is configured in your Vercel Project Settings → Environment Variables.');
+        } else if (res.status === 401 || serverCode === 'AUTH_REQUIRED' || serverCode === 'SESSION_EXPIRED') {
           setIsAuthError(true);
           setIsApiKeyMissing(false);
           throw new Error('Please sign in again to continue.');
+        } else if (res.status === 403 || serverCode === 'FORBIDDEN') {
+          setIsApiKeyMissing(false);
+          throw new Error(serverError || 'Access to the AI service is forbidden. Please check your project permissions.');
         } else if (res.status === 429 || serverCode === 'RATE_LIMIT') {
           setIsApiKeyMissing(false);
           throw new Error('Too many requests. Please wait a moment and try again.');
-        } else if (res.status === 503 || serverCode === 'API_KEY_MISSING') {
-          setIsApiKeyMissing(true);
-          throw new Error(serverError || 'Gemini AI API key is not configured. Please ensure GEMINI_API_KEY is configured in your Vercel Project Settings → Environment Variables.');
+        } else if (res.status === 503 || serverCode === 'SERVICE_UNAVAILABLE' || serverCode === 'SERVICE_BUSY') {
+          setIsApiKeyMissing(false);
+          throw new Error(serverError || 'The AI service is temporarily busy. Please try again shortly.');
         } else if (res.status === 504 || serverCode === 'TIMEOUT') {
           setIsApiKeyMissing(false);
           throw new Error('The request timed out. Please try again.');
@@ -649,16 +656,23 @@ export default function Chat() {
           // Non-readable body
         }
 
-        if (res.status === 401 || serverCode === 'AUTH_REQUIRED' || serverCode === 'SESSION_EXPIRED') {
+        if (serverCode === 'API_KEY_MISSING' || serverCode === 'API_KEY_INVALID') {
+          setIsApiKeyMissing(true);
+          setIsAuthError(false);
+          throw new Error(serverError || 'Gemini AI API key is not configured. Please ensure GEMINI_API_KEY is configured in your Vercel Project Settings → Environment Variables.');
+        } else if (res.status === 401 || serverCode === 'AUTH_REQUIRED' || serverCode === 'SESSION_EXPIRED') {
           setIsAuthError(true);
           setIsApiKeyMissing(false);
           throw new Error('Please sign in again to continue.');
+        } else if (res.status === 403 || serverCode === 'FORBIDDEN') {
+          setIsApiKeyMissing(false);
+          throw new Error(serverError || 'Access to the AI service is forbidden. Please check your project permissions.');
         } else if (res.status === 429 || serverCode === 'RATE_LIMIT') {
           setIsApiKeyMissing(false);
           throw new Error('Too many requests. Please wait a moment and try again.');
-        } else if (res.status === 503 || serverCode === 'API_KEY_MISSING') {
-          setIsApiKeyMissing(true);
-          throw new Error(serverError || 'Gemini AI API key is not configured. Please ensure GEMINI_API_KEY is configured in your Vercel Project Settings → Environment Variables.');
+        } else if (res.status === 503 || serverCode === 'SERVICE_UNAVAILABLE' || serverCode === 'SERVICE_BUSY') {
+          setIsApiKeyMissing(false);
+          throw new Error(serverError || 'The AI service is temporarily busy. Please try again shortly.');
         } else if (res.status === 504 || serverCode === 'TIMEOUT') {
           setIsApiKeyMissing(false);
           throw new Error('The request timed out. Please try again.');

@@ -27,26 +27,47 @@ const FALLBACK_GEMINI_MODEL = 'gemini-3.8-flash';
 
 /**
  * Server-only helper to safely retrieve and sanitize the Gemini API key.
- * Never logs or exposes the key value. Supports standard GEMINI_API_KEY and GOOGLE_API_KEY.
+ * Never logs or exposes the key value. Checks multiple standard environment variables
+ * (GEMINI_API_KEY, GOOGLE_GENAI_API_KEY, GOOGLE_API_KEY, etc.) and validates against
+ * common placeholder text or quotes.
  */
-function getGeminiApiKey(): string | null {
-  const rawKey =
-    process.env.GEMINI_API_KEY ||
-    process.env.GOOGLE_API_KEY ||
-    (process.env.GEMINI_MODEL && process.env.GEMINI_MODEL.startsWith('AIza') ? process.env.GEMINI_MODEL : null);
+function getGeminiApiKeyInfo(): { key: string | null; source: string } {
+  const sources: Array<[string, string | undefined]> = [
+    ['GEMINI_API_KEY', process.env.GEMINI_API_KEY],
+    ['GOOGLE_GENAI_API_KEY', process.env.GOOGLE_GENAI_API_KEY],
+    ['GOOGLE_API_KEY', process.env.GOOGLE_API_KEY],
+    ['VITE_GEMINI_API_KEY', process.env.VITE_GEMINI_API_KEY],
+    ['VITE_GOOGLE_API_KEY', process.env.VITE_GOOGLE_API_KEY],
+    ['GEMINI_KEY', process.env.GEMINI_KEY],
+    [
+      'GEMINI_MODEL_AS_KEY',
+      process.env.GEMINI_MODEL && process.env.GEMINI_MODEL.startsWith('AIza') ? process.env.GEMINI_MODEL : undefined
+    ]
+  ];
 
-  if (!rawKey || typeof rawKey !== 'string') return null;
-  const cleanKey = rawKey.trim().replace(/^["']|["']$/g, '');
-  if (
-    !cleanKey ||
-    cleanKey.startsWith('MY_') ||
-    cleanKey === 'undefined' ||
-    cleanKey === 'null' ||
-    cleanKey.length < 10
-  ) {
-    return null;
+  for (const [sourceName, val] of sources) {
+    if (val && typeof val === 'string') {
+      const clean = val.trim().replace(/^["']|["']$/g, '').replace(/;$/, '').trim();
+      if (
+        clean &&
+        !clean.startsWith('MY_') &&
+        !clean.toLowerCase().includes('placeholder') &&
+        !clean.toLowerCase().includes('your_api_key') &&
+        !clean.toLowerCase().includes('my_gemini') &&
+        clean !== 'undefined' &&
+        clean !== 'null' &&
+        clean.length >= 10
+      ) {
+        return { key: clean, source: sourceName };
+      }
+    }
   }
-  return cleanKey;
+
+  return { key: null, source: 'NONE' };
+}
+
+function getGeminiApiKey(): string | null {
+  return getGeminiApiKeyInfo().key;
 }
 
 function getValidGeminiModel(candidate?: string): string {
@@ -157,8 +178,8 @@ app.use((req, res, next) => {
 });
 
 // Health check endpoint for deployment validation and uptime checks
-app.get(['/api/health', '/health', '/api', '/api/'], (req, res) => {
-  const hasValidKey = Boolean(getGeminiApiKey());
+app.get(['/api/health', '/health', '/api', '/api/', '/api/health/', '/health/'], (req, res) => {
+  const { key: apiKey, source: keySource } = getGeminiApiKeyInfo();
   res.json({
     status: 'ok',
     environment: process.env.NODE_ENV || 'development',
@@ -170,7 +191,8 @@ app.get(['/api/health', '/health', '/api', '/api/'], (req, res) => {
       process.env.LAMBDA_TASK_ROOT ||
       process.env.IS_SERVERLESS === 'true'
     ),
-    geminiConfigured: hasValidKey,
+    geminiConfigured: Boolean(apiKey),
+    keySource,
     model: getValidGeminiModel(),
     timestamp: new Date().toISOString()
   });
@@ -237,11 +259,15 @@ async function generateContentWithFallback(ai: GoogleGenAI, payload: any, timeou
   throw lastError || new Error('All Gemini AI model options failed.');
 }
 
-app.post(['/api/extract', '/extract'], async (req, res) => {
+app.post(['/api/extract', '/extract', '/api/extract/', '/extract/'], async (req, res) => {
   try {
+    if (!req.body || typeof req.body !== 'object') {
+      return res.status(400).json({ error: 'Invalid request body. Expected JSON.', code: 'INVALID_REQUEST' });
+    }
+
     const { imageBase64, mimeType } = req.body;
     
-    if (!imageBase64) {
+    if (!imageBase64 || typeof imageBase64 !== 'string') {
       return res.status(400).json({ error: 'No image provided for receipt scan', code: 'NO_IMAGE' });
     }
 
@@ -249,7 +275,8 @@ app.post(['/api/extract', '/extract'], async (req, res) => {
     if (!apiKey) {
       return res.status(503).json({
         error: 'Receipt OCR scanning is temporarily unavailable. Please configure GEMINI_API_KEY in your Vercel Project Settings → Environment Variables.',
-        code: 'API_KEY_MISSING'
+        code: 'API_KEY_MISSING',
+        requiredEnv: 'GEMINI_API_KEY'
       });
     }
 
@@ -284,7 +311,9 @@ app.post(['/api/extract', '/extract'], async (req, res) => {
     const response = await generateContentWithFallback(ai, extractPayload, 18000);
 
     const text = response.text;
-    if (!text) throw new Error('No response from Gemini');
+    if (!text) {
+      return res.status(500).json({ error: 'Empty response received from AI model.', code: 'EMPTY_RESPONSE' });
+    }
     
     let cleanJson = text.trim();
     if (cleanJson.startsWith('```json')) {
@@ -295,13 +324,69 @@ app.post(['/api/extract', '/extract'], async (req, res) => {
 
     res.json(JSON.parse(cleanJson.trim()));
   } catch (error: any) {
-    console.error('Extraction Error:', error);
-    res.status(500).json({ error: error.message || 'Failed to extract receipt data', code: 'EXTRACT_FAILED' });
+    console.error('[Extraction Error]:', error?.message || error);
+    const statusCode = error?.status || error?.statusCode || error?.response?.status;
+    const msg = String(error?.message || '');
+    const lowerMsg = msg.toLowerCase();
+
+    if (statusCode === 429 || lowerMsg.includes('429') || lowerMsg.includes('quota') || lowerMsg.includes('resource_exhausted')) {
+      return res.status(429).json({
+        error: 'Too many requests or AI quota limit reached. Please wait a moment and try again.',
+        code: 'RATE_LIMIT'
+      });
+    }
+
+    if (statusCode === 401 || lowerMsg.includes('api_key_invalid') || lowerMsg.includes('unauthenticated')) {
+      return res.status(401).json({
+        error: 'Gemini API key is invalid or unauthorized. Please verify your GEMINI_API_KEY in Project Settings.',
+        code: 'API_KEY_INVALID'
+      });
+    }
+
+    if (statusCode === 403 || lowerMsg.includes('permission_denied')) {
+      return res.status(403).json({
+        error: 'Access to the Gemini model is forbidden. Please check your Google Cloud permissions.',
+        code: 'FORBIDDEN'
+      });
+    }
+
+    if (lowerMsg.includes('safety') || lowerMsg.includes('blocked')) {
+      return res.status(400).json({
+        error: 'Receipt image processing was blocked due to safety policies.',
+        code: 'SAFETY_BLOCKED'
+      });
+    }
+
+    if (statusCode === 504 || lowerMsg.includes('timeout') || lowerMsg.includes('deadline')) {
+      return res.status(504).json({
+        error: 'The extraction request timed out. Please try again with a clearer or smaller image.',
+        code: 'TIMEOUT'
+      });
+    }
+
+    if (statusCode === 503 || lowerMsg.includes('503') || lowerMsg.includes('high demand') || lowerMsg.includes('unavailable')) {
+      return res.status(503).json({
+        error: 'The AI service is temporarily experiencing high demand. Please try again shortly.',
+        code: 'SERVICE_UNAVAILABLE'
+      });
+    }
+
+    res.status(500).json({
+      error: 'Failed to extract receipt data. Please try again.',
+      code: 'EXTRACT_FAILED'
+    });
   }
 });
 
-app.post(['/api/chat', '/chat'], optionalAuth, async (req: AuthenticatedRequest, res) => {
+app.post(['/api/chat', '/chat', '/api/chat/', '/chat/'], optionalAuth, async (req: AuthenticatedRequest, res) => {
   try {
+    if (!req.body || typeof req.body !== 'object') {
+      return res.status(400).json({
+        error: 'Invalid request body. Expected JSON object.',
+        code: 'INVALID_REQUEST'
+      });
+    }
+
     const { messages, context, ledger, businessName: bodyBizName, currency: bodyCurrency } = req.body;
 
     if (!Array.isArray(messages) || messages.length === 0) {
@@ -315,7 +400,8 @@ app.post(['/api/chat', '/chat'], optionalAuth, async (req: AuthenticatedRequest,
     if (!apiKey) {
       return res.status(503).json({
         error: 'Gemini AI API key is not configured. Please ensure GEMINI_API_KEY is configured in your Vercel Project Settings → Environment Variables.',
-        code: 'API_KEY_MISSING'
+        code: 'API_KEY_MISSING',
+        requiredEnv: 'GEMINI_API_KEY'
       });
     }
 
@@ -390,39 +476,62 @@ Please provide an accurate, grounded, helpful response based on the confirmed bu
 
     res.json({ reply: replyText });
   } catch (error: any) {
-    console.error('Chat Error:', error);
+    console.error('[Chat Error]:', error?.message || error);
+    const statusCode = error?.status || error?.statusCode || error?.response?.status;
     const msg = String(error?.message || '');
+    const lowerMsg = msg.toLowerCase();
 
-    if (msg.includes('429') || msg.toLowerCase().includes('quota') || msg.toLowerCase().includes('rate limit')) {
+    // 1. Quota / Rate limits (429)
+    if (statusCode === 429 || lowerMsg.includes('429') || lowerMsg.includes('quota') || lowerMsg.includes('rate limit') || lowerMsg.includes('resource_exhausted')) {
       return res.status(429).json({
-        error: 'Too many requests. Please wait a moment and try again.',
+        error: 'Too many requests or AI quota limit reached. Please wait a moment and try again.',
         code: 'RATE_LIMIT'
       });
     }
 
-    if (msg.toLowerCase().includes('safety') || msg.toLowerCase().includes('blocked')) {
+    // 2. Authentication / API Key invalid (401)
+    if (statusCode === 401 || lowerMsg.includes('api_key_invalid') || lowerMsg.includes('unauthenticated')) {
+      return res.status(401).json({
+        error: 'Gemini AI API key is invalid or unauthorized. Please verify your GEMINI_API_KEY in Project Settings.',
+        code: 'API_KEY_INVALID'
+      });
+    }
+
+    // 3. Permission denied (403)
+    if (statusCode === 403 || lowerMsg.includes('permission_denied')) {
+      return res.status(403).json({
+        error: 'Access to the Gemini model is forbidden. Please check your Google Cloud permissions.',
+        code: 'FORBIDDEN'
+      });
+    }
+
+    // 4. Content safety policy blocked (400)
+    if (lowerMsg.includes('safety') || lowerMsg.includes('blocked') || lowerMsg.includes('harm_category')) {
       return res.status(400).json({
         error: 'The message could not be processed due to safety policies. Please rephrase your question.',
         code: 'SAFETY_BLOCKED'
       });
     }
 
-    if (msg.toLowerCase().includes('timeout') || msg.toLowerCase().includes('deadline')) {
+    // 5. Timeout (504)
+    if (statusCode === 504 || lowerMsg.includes('timeout') || lowerMsg.includes('deadline')) {
       return res.status(504).json({
         error: 'The request timed out. Please try again.',
         code: 'TIMEOUT'
       });
     }
 
-    if (msg.toLowerCase().includes('api_key') || msg.toLowerCase().includes('unauthenticated') || msg.toLowerCase().includes('api key')) {
+    // 6. Temporary service capacity / High demand (503)
+    if (statusCode === 503 || lowerMsg.includes('503') || lowerMsg.includes('high demand') || lowerMsg.includes('unavailable')) {
       return res.status(503).json({
-        error: 'Gemini AI API key is invalid or not configured. Please check Settings.',
-        code: 'API_KEY_MISSING'
+        error: 'The AI model is temporarily experiencing high demand. Please try again shortly.',
+        code: 'SERVICE_UNAVAILABLE'
       });
     }
 
+    // 7. General internal error (500)
     res.status(500).json({
-      error: error?.message || 'The AI service is temporarily unavailable. Please try again.',
+      error: 'An error occurred while communicating with the AI service. Please try again.',
       code: 'API_ERROR'
     });
   }
