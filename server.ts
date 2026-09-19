@@ -5,7 +5,7 @@ import fs from 'fs';
 import { WebSocketServer, WebSocket } from 'ws';
 import { GoogleGenAI } from '@google/genai';
 import path from 'path';
-import { authRouter, requireAuth, optionalAuth, AuthenticatedRequest } from './server/auth';
+import { authRouter, requireAuth, optionalAuth, AuthenticatedRequest } from './server/auth.ts';
 
 const app = express();
 const PORT = 3000;
@@ -19,15 +19,20 @@ if (
   if (!process.env.GEMINI_API_KEY) {
     process.env.GEMINI_API_KEY = process.env.GEMINI_MODEL;
   }
-  process.env.GEMINI_MODEL = 'gemini-3.8-flash';
+  process.env.GEMINI_MODEL = 'gemini-3.6-flash';
 }
 
-const DEFAULT_GEMINI_MODEL = 'gemini-3.8-flash';
+const DEFAULT_GEMINI_MODEL = 'gemini-3.6-flash';
 const FALLBACK_GEMINI_MODEL = 'gemini-3.1-flash-lite';
 
 function getValidGeminiModel(candidate?: string): string {
   const model = (candidate || process.env.GEMINI_MODEL || '').trim();
-  if (!model || model.startsWith('AIza') || (model.length > 30 && !model.includes('-'))) {
+  if (
+    !model ||
+    model.startsWith('AIza') ||
+    (model.length > 30 && !model.includes('-')) ||
+    model === 'gemini-2.5-flash'
+  ) {
     return DEFAULT_GEMINI_MODEL;
   }
   return model;
@@ -162,6 +167,46 @@ function getGenAI() {
   });
 }
 
+// Protected helper for execution timeouts
+const executeWithTimeout = async <T>(promise: Promise<T>, timeoutMs = 20000, operationName = 'Request'): Promise<T> => {
+  let timer: NodeJS.Timeout;
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => {
+      const timeoutErr: any = new Error(`${operationName} timed out.`);
+      timeoutErr.code = 'TIMEOUT';
+      reject(timeoutErr);
+    }, timeoutMs);
+  });
+  return Promise.race([promise, timeoutPromise]).finally(() => clearTimeout(timer));
+};
+
+// Tiered model cascade: preferred -> gemini-3.6-flash -> gemini-3.1-flash-lite
+async function generateContentWithFallback(ai: GoogleGenAI, payload: any, timeoutMs = 18000, preferredModel?: string): Promise<any> {
+  const preferred = getValidGeminiModel(preferredModel);
+  const modelsToTry = Array.from(new Set([preferred, 'gemini-3.6-flash', 'gemini-3.1-flash-lite']));
+  
+  let lastError: any = null;
+  for (const model of modelsToTry) {
+    try {
+      const response: any = await executeWithTimeout(
+        ai.models.generateContent({
+          model,
+          ...payload
+        }),
+        timeoutMs,
+        `Gemini ${model} generation`
+      );
+      if (response && response.text) {
+        return response;
+      }
+    } catch (err: any) {
+      console.warn(`Model "${model}" failed, trying next fallback:`, err?.message || err);
+      lastError = err;
+    }
+  }
+  throw lastError || new Error('All Gemini AI model options failed.');
+}
+
 app.post(['/api/extract', '/extract'], async (req, res) => {
   try {
     const { imageBase64, mimeType } = req.body;
@@ -179,8 +224,6 @@ app.post(['/api/extract', '/extract'], async (req, res) => {
     }
 
     const ai = getGenAI();
-    const primaryModel = getValidGeminiModel();
-    const fallbackModel = primaryModel === DEFAULT_GEMINI_MODEL ? FALLBACK_GEMINI_MODEL : DEFAULT_GEMINI_MODEL;
 
     const extractPayload = {
       contents: [
@@ -208,37 +251,7 @@ app.post(['/api/extract', '/extract'], async (req, res) => {
       }
     };
 
-    const executeWithTimeout = async <T>(promise: Promise<T>, timeoutMs = 20000): Promise<T> => {
-      let timer: NodeJS.Timeout;
-      const timeoutPromise = new Promise<never>((_, reject) => {
-        timer = setTimeout(() => {
-          const timeoutErr: any = new Error('Receipt extraction request timed out.');
-          timeoutErr.code = 'TIMEOUT';
-          reject(timeoutErr);
-        }, timeoutMs);
-      });
-      return Promise.race([promise, timeoutPromise]).finally(() => clearTimeout(timer));
-    };
-
-    let response: any;
-    try {
-      response = await executeWithTimeout(
-        ai.models.generateContent({
-          model: primaryModel,
-          ...extractPayload
-        }),
-        18000
-      );
-    } catch (primaryErr: any) {
-      console.warn(`Extraction with ${primaryModel} failed, trying fallback ${fallbackModel}:`, primaryErr?.message || primaryErr);
-      response = await executeWithTimeout(
-        ai.models.generateContent({
-          model: fallbackModel,
-          ...extractPayload
-        }),
-        18000
-      );
-    }
+    const response = await generateContentWithFallback(ai, extractPayload, 18000);
 
     const text = response.text;
     if (!text) throw new Error('No response from Gemini');
@@ -324,8 +337,6 @@ Current Question: ${userQuery}
 Please provide an accurate, grounded, helpful response based on the confirmed business data above.`;
 
     const ai = getGenAI();
-    const primaryModel = getValidGeminiModel();
-    const fallbackModel = primaryModel === DEFAULT_GEMINI_MODEL ? FALLBACK_GEMINI_MODEL : DEFAULT_GEMINI_MODEL;
     let replyText = '';
 
     const chatPayload = {
@@ -337,39 +348,8 @@ Please provide an accurate, grounded, helpful response based on the confirmed bu
       }
     };
 
-    // Protect against serverless function hangs by setting an execution timeout
-    const executeWithTimeout = async <T>(promise: Promise<T>, timeoutMs = 20000): Promise<T> => {
-      let timer: NodeJS.Timeout;
-      const timeoutPromise = new Promise<never>((_, reject) => {
-        timer = setTimeout(() => {
-          const timeoutErr: any = new Error('The AI service request timed out.');
-          timeoutErr.code = 'TIMEOUT';
-          reject(timeoutErr);
-        }, timeoutMs);
-      });
-      return Promise.race([promise, timeoutPromise]).finally(() => clearTimeout(timer));
-    };
-
-    try {
-      const response: any = await executeWithTimeout(
-        ai.models.generateContent({
-          model: primaryModel,
-          ...chatPayload
-        }),
-        15000
-      );
-      replyText = response.text ? response.text.trim() : '';
-    } catch (modelErr: any) {
-      console.warn(`Primary chat model "${primaryModel}" failed, falling back to ${fallbackModel}:`, modelErr?.message || modelErr);
-      const fallbackResponse: any = await executeWithTimeout(
-        ai.models.generateContent({
-          model: fallbackModel,
-          ...chatPayload
-        }),
-        15000
-      );
-      replyText = fallbackResponse.text ? fallbackResponse.text.trim() : '';
-    }
+    const response = await generateContentWithFallback(ai, chatPayload, 15000);
+    replyText = response.text ? response.text.trim() : '';
 
     if (!replyText) {
       return res.status(200).json({
