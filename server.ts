@@ -23,7 +23,31 @@ if (
 }
 
 const DEFAULT_GEMINI_MODEL = 'gemini-3.6-flash';
-const FALLBACK_GEMINI_MODEL = 'gemini-3.1-flash-lite';
+const FALLBACK_GEMINI_MODEL = 'gemini-3.8-flash';
+
+/**
+ * Server-only helper to safely retrieve and sanitize the Gemini API key.
+ * Never logs or exposes the key value. Supports standard GEMINI_API_KEY and GOOGLE_API_KEY.
+ */
+function getGeminiApiKey(): string | null {
+  const rawKey =
+    process.env.GEMINI_API_KEY ||
+    process.env.GOOGLE_API_KEY ||
+    (process.env.GEMINI_MODEL && process.env.GEMINI_MODEL.startsWith('AIza') ? process.env.GEMINI_MODEL : null);
+
+  if (!rawKey || typeof rawKey !== 'string') return null;
+  const cleanKey = rawKey.trim().replace(/^["']|["']$/g, '');
+  if (
+    !cleanKey ||
+    cleanKey.startsWith('MY_') ||
+    cleanKey === 'undefined' ||
+    cleanKey === 'null' ||
+    cleanKey.length < 10
+  ) {
+    return null;
+  }
+  return cleanKey;
+}
 
 function getValidGeminiModel(candidate?: string): string {
   const model = (candidate || process.env.GEMINI_MODEL || '').trim();
@@ -31,7 +55,9 @@ function getValidGeminiModel(candidate?: string): string {
     !model ||
     model.startsWith('AIza') ||
     (model.length > 30 && !model.includes('-')) ||
-    model === 'gemini-2.5-flash'
+    model === 'gemini-2.5-flash' ||
+    model === 'gemini-1.5-flash' ||
+    model === 'gemini-2.0-flash'
   ) {
     return DEFAULT_GEMINI_MODEL;
   }
@@ -132,7 +158,7 @@ app.use((req, res, next) => {
 
 // Health check endpoint for deployment validation and uptime checks
 app.get(['/api/health', '/health', '/api', '/api/'], (req, res) => {
-  const hasValidKey = Boolean(process.env.GEMINI_API_KEY || (process.env.GEMINI_MODEL && process.env.GEMINI_MODEL.startsWith('AIza')));
+  const hasValidKey = Boolean(getGeminiApiKey());
   res.json({
     status: 'ok',
     environment: process.env.NODE_ENV || 'development',
@@ -156,13 +182,10 @@ app.use('/auth', authRouter);
 app.use('/api', authRouter);
 
 // Init Gemini lazily / securely
-function getGenAI() {
-  let apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey && process.env.GEMINI_MODEL && process.env.GEMINI_MODEL.startsWith('AIza')) {
-    apiKey = process.env.GEMINI_MODEL;
-  }
+function getGenAI(): GoogleGenAI {
+  const apiKey = getGeminiApiKey();
   if (!apiKey) {
-    throw new Error('GEMINI_API_KEY is not configured');
+    throw new Error('GEMINI_API_KEY is not configured on the server');
   }
   return new GoogleGenAI({
     apiKey,
@@ -187,10 +210,10 @@ const executeWithTimeout = async <T>(promise: Promise<T>, timeoutMs = 20000, ope
   return Promise.race([promise, timeoutPromise]).finally(() => clearTimeout(timer));
 };
 
-// Tiered model cascade: preferred -> gemini-3.6-flash -> gemini-3.1-flash-lite
-async function generateContentWithFallback(ai: GoogleGenAI, payload: any, timeoutMs = 18000, preferredModel?: string): Promise<any> {
+// Tiered model cascade: preferred -> gemini-3.6-flash -> gemini-3.8-flash -> gemini-3.1-flash-lite
+async function generateContentWithFallback(ai: GoogleGenAI, payload: any, timeoutMs = 12000, preferredModel?: string): Promise<any> {
   const preferred = getValidGeminiModel(preferredModel);
-  const modelsToTry = Array.from(new Set([preferred, 'gemini-3.6-flash', 'gemini-3.1-flash-lite']));
+  const modelsToTry = Array.from(new Set([preferred, 'gemini-3.6-flash', 'gemini-3.8-flash', 'gemini-3.1-flash-lite']));
   
   let lastError: any = null;
   for (const model of modelsToTry) {
@@ -222,10 +245,10 @@ app.post(['/api/extract', '/extract'], async (req, res) => {
       return res.status(400).json({ error: 'No image provided for receipt scan', code: 'NO_IMAGE' });
     }
 
-    const hasApiKey = Boolean(process.env.GEMINI_API_KEY || (process.env.GEMINI_MODEL && process.env.GEMINI_MODEL.startsWith('AIza')));
-    if (!hasApiKey) {
+    const apiKey = getGeminiApiKey();
+    if (!apiKey) {
       return res.status(503).json({
-        error: 'Receipt OCR scanning is temporarily unavailable. Please verify API key configuration in Settings.',
+        error: 'Receipt OCR scanning is temporarily unavailable. Please configure GEMINI_API_KEY in your Vercel Project Settings → Environment Variables.',
         code: 'API_KEY_MISSING'
       });
     }
@@ -288,10 +311,10 @@ app.post(['/api/chat', '/chat'], optionalAuth, async (req: AuthenticatedRequest,
       });
     }
 
-    const hasApiKey = Boolean(process.env.GEMINI_API_KEY || (process.env.GEMINI_MODEL && process.env.GEMINI_MODEL.startsWith('AIza')));
-    if (!hasApiKey) {
+    const apiKey = getGeminiApiKey();
+    if (!apiKey) {
       return res.status(503).json({
-        error: 'Gemini AI API key is not configured. Please ensure GEMINI_API_KEY is configured in your environment or Settings.',
+        error: 'Gemini AI API key is not configured. Please ensure GEMINI_API_KEY is configured in your Vercel Project Settings → Environment Variables.',
         code: 'API_KEY_MISSING'
       });
     }

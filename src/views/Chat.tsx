@@ -161,6 +161,8 @@ export default function Chat() {
   const [scanStatusText, setScanStatusText] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [isAuthError, setIsAuthError] = useState(false);
+  const [isApiKeyMissing, setIsApiKeyMissing] = useState(false);
+  const [isCheckingKey, setIsCheckingKey] = useState(false);
 
   // References to strictly prevent duplicate submissions
   const isSubmittingRef = useRef(false);
@@ -528,14 +530,19 @@ export default function Chat() {
 
         if (res.status === 401 || serverCode === 'AUTH_REQUIRED' || serverCode === 'SESSION_EXPIRED') {
           setIsAuthError(true);
+          setIsApiKeyMissing(false);
           throw new Error('Please sign in again to continue.');
         } else if (res.status === 429 || serverCode === 'RATE_LIMIT') {
+          setIsApiKeyMissing(false);
           throw new Error('Too many requests. Please wait a moment and try again.');
         } else if (res.status === 503 || serverCode === 'API_KEY_MISSING') {
-          throw new Error(serverError || 'The Gemini AI service is temporarily unavailable. Please verify your GEMINI_API_KEY in Settings.');
+          setIsApiKeyMissing(true);
+          throw new Error(serverError || 'Gemini AI API key is not configured. Please ensure GEMINI_API_KEY is configured in your Vercel Project Settings → Environment Variables.');
         } else if (res.status === 504 || serverCode === 'TIMEOUT') {
+          setIsApiKeyMissing(false);
           throw new Error('The request timed out. Please try again.');
         } else {
+          setIsApiKeyMissing(false);
           throw new Error(serverError || 'Something went wrong. Please try again.');
         }
       }
@@ -556,8 +563,10 @@ export default function Chat() {
         role: 'assistant',
         content: replyContent
       }]);
-      // Clear failed message reference upon success
+      // Clear failed message reference and error states upon success
       failedMessageRef.current = null;
+      setErrorMsg(null);
+      setIsApiKeyMissing(false);
     } catch (err: any) {
       if (!window.navigator.onLine) {
         setErrorMsg('Connection failed. Please check your internet connection and try again.');
@@ -642,14 +651,19 @@ export default function Chat() {
 
         if (res.status === 401 || serverCode === 'AUTH_REQUIRED' || serverCode === 'SESSION_EXPIRED') {
           setIsAuthError(true);
+          setIsApiKeyMissing(false);
           throw new Error('Please sign in again to continue.');
         } else if (res.status === 429 || serverCode === 'RATE_LIMIT') {
+          setIsApiKeyMissing(false);
           throw new Error('Too many requests. Please wait a moment and try again.');
         } else if (res.status === 503 || serverCode === 'API_KEY_MISSING') {
-          throw new Error(serverError || 'The Gemini AI service is temporarily unavailable. Please check GEMINI_API_KEY.');
+          setIsApiKeyMissing(true);
+          throw new Error(serverError || 'Gemini AI API key is not configured. Please ensure GEMINI_API_KEY is configured in your Vercel Project Settings → Environment Variables.');
         } else if (res.status === 504 || serverCode === 'TIMEOUT') {
+          setIsApiKeyMissing(false);
           throw new Error('The request timed out. Please try again.');
         } else {
+          setIsApiKeyMissing(false);
           throw new Error(serverError || 'Something went wrong. Please try again.');
         }
       }
@@ -666,6 +680,8 @@ export default function Chat() {
         content: replyContent
       }]);
       failedMessageRef.current = null;
+      setErrorMsg(null);
+      setIsApiKeyMissing(false);
     } catch (err: any) {
       if (!window.navigator.onLine) {
         setErrorMsg('Connection failed. Please check your internet connection and try again.');
@@ -677,6 +693,33 @@ export default function Chat() {
     } finally {
       isSubmittingRef.current = false;
       setIsLoading(false);
+    }
+  };
+
+  /**
+   * Health Check Handler:
+   * Validates if GEMINI_API_KEY is configured without sending a full prompt.
+   * If detected, automatically retries the user's pending message!
+   */
+  const handleCheckKeyConfig = async () => {
+    if (isCheckingKey || isLoading) return;
+    setIsCheckingKey(true);
+    try {
+      const res = await fetch('/api/health');
+      if (res.ok) {
+        const data = await res.json();
+        if (data?.geminiConfigured) {
+          setIsApiKeyMissing(false);
+          setErrorMsg(null);
+          await handleRetry();
+          return;
+        }
+      }
+      setErrorMsg('Gemini AI API key is not yet detected on the server. Please ensure GEMINI_API_KEY is saved in your Vercel Project Settings → Environment Variables and redeployed.');
+    } catch {
+      setErrorMsg('Unable to verify server health. Please check your connection and try again.');
+    } finally {
+      setIsCheckingKey(false);
     }
   };
 
@@ -929,14 +972,25 @@ export default function Chat() {
                 <span className="text-xs font-medium leading-snug">{errorMsg}</span>
               </div>
               <div className="flex items-center space-x-2 pt-0.5">
-                <button 
-                  onClick={handleRetry}
-                  disabled={isLoading}
-                  className="text-xs font-bold bg-white dark:bg-gray-800 px-3.5 py-1.5 rounded-full border border-rose-200 dark:border-rose-800 text-rose-600 dark:text-rose-400 hover:bg-rose-100 dark:hover:bg-rose-900/40 transition-colors flex items-center space-x-1.5 shadow-xs disabled:opacity-50"
-                >
-                  <RefreshCw className={cn("w-3 h-3", isLoading && "animate-spin")} />
-                  <span>Retry</span>
-                </button>
+                {isApiKeyMissing ? (
+                  <button 
+                    onClick={handleCheckKeyConfig}
+                    disabled={isCheckingKey || isLoading}
+                    className="text-xs font-bold bg-white dark:bg-gray-800 px-3.5 py-1.5 rounded-full border border-rose-200 dark:border-rose-800 text-rose-600 dark:text-rose-400 hover:bg-rose-100 dark:hover:bg-rose-900/40 transition-colors flex items-center space-x-1.5 shadow-xs disabled:opacity-50"
+                  >
+                    <RefreshCw className={cn("w-3 h-3", isCheckingKey && "animate-spin")} />
+                    <span>{isCheckingKey ? 'Checking...' : 'Check Status'}</span>
+                  </button>
+                ) : (
+                  <button 
+                    onClick={handleRetry}
+                    disabled={isLoading}
+                    className="text-xs font-bold bg-white dark:bg-gray-800 px-3.5 py-1.5 rounded-full border border-rose-200 dark:border-rose-800 text-rose-600 dark:text-rose-400 hover:bg-rose-100 dark:hover:bg-rose-900/40 transition-colors flex items-center space-x-1.5 shadow-xs disabled:opacity-50"
+                  >
+                    <RefreshCw className={cn("w-3 h-3", isLoading && "animate-spin")} />
+                    <span>Retry</span>
+                  </button>
+                )}
                 {isAuthError && (
                   <Link
                     to="/login"
