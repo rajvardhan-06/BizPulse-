@@ -136,7 +136,14 @@ app.get(['/api/health', '/health', '/api', '/api/'], (req, res) => {
   res.json({
     status: 'ok',
     environment: process.env.NODE_ENV || 'development',
-    isVercel: Boolean(process.env.VERCEL || process.env.VERCEL_ENV || process.env.NOW_REGION),
+    isVercel: Boolean(
+      process.env.VERCEL ||
+      process.env.VERCEL_ENV ||
+      process.env.NOW_REGION ||
+      process.env.AWS_LAMBDA_FUNCTION_NAME ||
+      process.env.LAMBDA_TASK_ROOT ||
+      process.env.IS_SERVERLESS === 'true'
+    ),
     geminiConfigured: hasValidKey,
     model: getValidGeminiModel(),
     timestamp: new Date().toISOString()
@@ -490,9 +497,16 @@ async function startServer() {
   });
 }
 
-const isVercel = Boolean(process.env.VERCEL || process.env.VERCEL_ENV || process.env.NOW_REGION);
+const isServerless = Boolean(
+  process.env.VERCEL ||
+  process.env.VERCEL_ENV ||
+  process.env.NOW_REGION ||
+  process.env.AWS_LAMBDA_FUNCTION_NAME ||
+  process.env.LAMBDA_TASK_ROOT ||
+  process.env.IS_SERVERLESS === 'true'
+);
 
-if (!isVercel) {
+if (!isServerless) {
   startServer();
 }
 

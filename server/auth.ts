@@ -77,7 +77,14 @@ export interface AuthenticatedRequest extends Request {
 }
 
 // In-memory store with file fallback
-const isVercel = Boolean(process.env.VERCEL || process.env.VERCEL_ENV || process.env.NOW_REGION);
+const isVercel = Boolean(
+  process.env.VERCEL ||
+  process.env.VERCEL_ENV ||
+  process.env.NOW_REGION ||
+  process.env.AWS_LAMBDA_FUNCTION_NAME ||
+  process.env.LAMBDA_TASK_ROOT ||
+  process.env.IS_SERVERLESS === 'true'
+);
 const DATA_DIR = isVercel ? path.join('/tmp', '.bizpulse_data') : path.resolve(process.cwd(), '.bizpulse_data');
 const USERS_FILE = path.join(DATA_DIR, 'users.json');
 const SESSIONS_FILE = path.join(DATA_DIR, 'sessions.json');
